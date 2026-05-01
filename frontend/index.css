@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+body {
+  overscroll-behavior: none;
+}
+
+
+.chat-bg {
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4e3ff' fill-opacity='0.35'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+.dark .chat-bg {
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23334155' fill-opacity='0.18'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* =========================
+   Global Custom Scrollbar
+   ========================= */
+
+/* 1. WebKit Browsers (Chrome, Edge, Safari) */
+
+/* Target ALL elements */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px; /* Width for horizontal scrollbars */
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Initially transparent thumb */
+*::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 999px;
+}
+
+/* Show thumb on hover */
+*:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.4); /* slate-400 */
+}
+
+/* Dark mode hover state */
+.dark *:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(71, 85, 105, 0.6); /* slate-600 */
+}
+
+
+/* 2. Firefox */
+
+/* Apply to ALL elements */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent; /* Thumb Track */
+}
+
+/* Show thumb on hover */
+*:hover {
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+}
+
+/* Dark mode for Firefox */
+.dark *:hover {
+  scrollbar-color: rgba(71, 85, 105, 0.6) transparent;
+}
+
+
+/* Chat input scrollbar */
+textarea::-webkit-scrollbar {
+  width: 4px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.4);
+  border-radius: 999px;
+}
+
+.dark textarea::-webkit-scrollbar-thumb {
+  background-color: rgba(71, 85, 105, 0.6);
+}
+
+
+button:hover {
+  cursor: pointer;
+}
+
