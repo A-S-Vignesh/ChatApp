@@ -2,16 +2,18 @@ import React, { useState, useEffect } from "react";
 import type { User } from "../../types";
 import {
   X,
-  Edit3,
-  Save,
-  CheckCircle,
+  Pencil,
+  Check,
+  CheckCircle2,
   Mail,
   Phone,
   MapPin,
-  Calendar,
-  User as UserIcon,
+  CalendarDays,
+  UserRound,
+  ShieldCheck,
 } from "lucide-react";
 import { UserType } from "../types/user";
+import Avatar from "./Avatar";
 
 interface MyProfileProps {
   user: UserType;
@@ -19,11 +21,7 @@ interface MyProfileProps {
   onUpdateProfile: (updatedUser: User) => void;
 }
 
-const MyProfile: React.FC<MyProfileProps> = ({
-  user,
-  onClose,
-  onUpdateProfile,
-}: MyProfileProps) => {
+const MyProfile: React.FC<MyProfileProps> = ({ user, onClose, onUpdateProfile }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     name: user.name,
@@ -43,9 +41,7 @@ const MyProfile: React.FC<MyProfileProps> = ({
     }
   }, [user, isEditing]);
 
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -55,257 +51,263 @@ const MyProfile: React.FC<MyProfileProps> = ({
     setIsEditing(false);
   };
 
+  const handleCancel = () => {
+    setIsEditing(false);
+    setFormData({
+      name: user.name,
+      about: user.about || "",
+      phone: user.phone || "",
+      location: user.location || "",
+    });
+  };
+
   return (
     <div className="h-full flex flex-col bg-white dark:bg-slate-800">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      {/* Top bar */}
+      <header className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 z-10">
+        <div className="flex items-center gap-3">
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"
+            className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors"
             aria-label="Close profile"
           >
-            <X size={20} className="text-slate-500 dark:text-slate-400" />
+            <X size={18} />
           </button>
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+          <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">
             My Profile
           </h2>
         </div>
         {!isEditing && (
           <button
             onClick={() => setIsEditing(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
           >
-            <Edit3 size={16} />
+            <Pencil size={14} />
             Edit
           </button>
         )}
-      </div>
+      </header>
 
-      {/* Content - Non-scrollable */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {/* Profile Picture & Basic Info */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="relative mb-4">
-            <img
-              className="w-28 h-28 rounded-full object-cover border-4 border-white dark:border-slate-800 shadow-lg"
+      <div className="flex-1 overflow-y-auto">
+        {/* Hero section */}
+        <div className="relative">
+          {/* Banner */}
+          <div className="h-28 bg-linear-to-br from-blue-600 via-blue-700 to-indigo-700" />
+
+          {/* Avatar — straddles banner/content boundary */}
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-0 translate-y-1/2">
+            <Avatar
               src={user.image}
               alt={user.name}
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                  user.name
-                )}&background=3b82f6&color=fff&size=112`;
-              }}
+              isOnline={user.isOnline}
+              size="lg"
+              className="ring-4 ring-white dark:ring-slate-800 shadow-xl"
             />
-            <div className="absolute bottom-2 right-2 w-6 h-6 bg-green-500 rounded-full border-3 border-white dark:border-slate-800 flex items-center justify-center">
-              <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-            </div>
-          </div>
-
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  className="text-xl font-bold text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-4 py-2 text-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  aria-label="Edit your name"
-                />
-              ) : (
-                <>
-                  <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-                    {user.name}
-                  </h2>
-                  {user.emailVerified && (
-                    <CheckCircle
-                      size={18}
-                      className="text-blue-500"
-                      title="Verified account"
-                    />
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="flex items-center justify-center gap-2">
-              <div
-                className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  user.isOnline
-                    ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                    : "bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                {user.isOnline ? "Online" : "Offline"}
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* About Section */}
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <UserIcon
-              size={16}
-              className="text-slate-500 dark:text-slate-400"
-            />
-            <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-              About
-            </h3>
-          </div>
+        {/* Identity block */}
+        <div className="pt-16 pb-6 px-6 text-center border-b border-slate-100 dark:border-slate-700">
           {isEditing ? (
-            <textarea
-              name="about"
-              value={formData.about}
-              onChange={handleInputChange}
-              rows={3}
-              className="w-full text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
-              placeholder="Tell something about yourself..."
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              className="text-xl font-bold text-center w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-4 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              aria-label="Display name"
             />
           ) : (
-            <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed bg-slate-50 dark:bg-slate-700/50 rounded-lg p-4">
-              {user.about || "No bio yet"}
-            </p>
+            <div className="flex items-center justify-center gap-2">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                {user.name}
+              </h3>
+              {user.emailVerified && (
+                <CheckCircle2 size={17} className="text-blue-500 shrink-0" title="Verified" />
+              )}
+            </div>
           )}
+
+          <div className="mt-2 flex items-center justify-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                user.isOnline
+                  ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                  : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  user.isOnline ? "bg-green-500" : "bg-slate-400"
+                }`}
+              />
+              {user.isOnline ? "Online" : "Offline"}
+            </span>
+          </div>
         </div>
 
-        {/* Contact Info */}
-        <div className="space-y-4">
-          {/* Email */}
-          <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <Mail size={16} className="text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
-                Email
+        {/* Info sections */}
+        <div className="px-4 py-5 space-y-2">
+
+          {/* About */}
+          <Section label="About" icon={<UserRound size={15} className="text-blue-500" />}>
+            {isEditing ? (
+              <textarea
+                name="about"
+                value={formData.about}
+                onChange={handleChange}
+                rows={3}
+                placeholder="Tell something about yourself…"
+                className="w-full text-sm bg-slate-50 dark:bg-slate-700/60 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2.5 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition"
+              />
+            ) : (
+              <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                {user.about || <span className="text-slate-400 italic">No bio yet</span>}
               </p>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
-                  {user.email}
-                </p>
-                {user.emailVerified ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs">
-                    <CheckCircle size={10} />
-                    Verified
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full text-xs">
-                    Unverified
-                  </span>
-                )}
-              </div>
+            )}
+          </Section>
+
+          {/* Email */}
+          <InfoRow
+            icon={<Mail size={15} className="text-blue-500" />}
+            label="Email"
+            bg="bg-blue-50 dark:bg-blue-900/20"
+          >
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
+                {user.email}
+              </span>
+              {user.emailVerified ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-medium shrink-0">
+                  <ShieldCheck size={10} />
+                  Verified
+                </span>
+              ) : (
+                <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full text-xs font-medium shrink-0">
+                  Unverified
+                </span>
+              )}
             </div>
-          </div>
+          </InfoRow>
 
           {/* Phone */}
-          <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
-            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
-              <Phone
-                size={16}
-                className="text-emerald-600 dark:text-emerald-400"
+          <InfoRow
+            icon={<Phone size={15} className="text-emerald-500" />}
+            label="Phone"
+            bg="bg-emerald-50 dark:bg-emerald-900/20"
+          >
+            {isEditing ? (
+              <input
+                type="tel"
+                name="phone"
+                value={formData.phone}
+                onChange={handleChange}
+                placeholder="Add phone number"
+                className="w-full text-sm bg-transparent border-b border-slate-300 dark:border-slate-600 focus:border-blue-500 outline-none pb-0.5 text-slate-800 dark:text-slate-200 placeholder-slate-400 transition"
               />
-            </div>
-            <div className="flex-1">
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
-                Phone
-              </p>
-              {isEditing ? (
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  className="w-full text-sm text-slate-800 dark:text-slate-200 bg-transparent border-b border-slate-300 dark:border-slate-600 focus:border-blue-500 focus:outline-none pb-1"
-                  placeholder="Add phone number"
-                />
-              ) : (
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                  {user.phone || "Not added"}
-                </p>
-              )}
-            </div>
-          </div>
+            ) : (
+              <span className={`text-sm font-medium ${user.phone ? "text-slate-800 dark:text-slate-200" : "text-slate-400 italic"}`}>
+                {user.phone || "Not added"}
+              </span>
+            )}
+          </InfoRow>
 
           {/* Location */}
-          <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
-            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-              <MapPin
-                size={16}
-                className="text-purple-600 dark:text-purple-400"
+          <InfoRow
+            icon={<MapPin size={15} className="text-purple-500" />}
+            label="Location"
+            bg="bg-purple-50 dark:bg-purple-900/20"
+          >
+            {isEditing ? (
+              <input
+                type="text"
+                name="location"
+                value={formData.location}
+                onChange={handleChange}
+                placeholder="Add your location"
+                className="w-full text-sm bg-transparent border-b border-slate-300 dark:border-slate-600 focus:border-blue-500 outline-none pb-0.5 text-slate-800 dark:text-slate-200 placeholder-slate-400 transition"
               />
-            </div>
-            <div className="flex-1">
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
-                Location
-              </p>
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleInputChange}
-                  className="w-full text-sm text-slate-800 dark:text-slate-200 bg-transparent border-b border-slate-300 dark:border-slate-600 focus:border-blue-500 focus:outline-none pb-1"
-                  placeholder="Add location"
-                />
-              ) : (
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                  {user.location || "Not added"}
-                </p>
-              )}
-            </div>
-          </div>
+            ) : (
+              <span className={`text-sm font-medium ${user.location ? "text-slate-800 dark:text-slate-200" : "text-slate-400 italic"}`}>
+                {user.location || "Not added"}
+              </span>
+            )}
+          </InfoRow>
 
-          {/* Member Since */}
+          {/* Member since */}
           {user.createdAt && (
-            <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
-              <div className="p-2 bg-slate-200 dark:bg-slate-600 rounded-lg">
-                <Calendar
-                  size={16}
-                  className="text-slate-600 dark:text-slate-300"
-                />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
-                  Member since
-                </p>
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                  {new Date(user.createdAt).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </p>
-              </div>
-            </div>
+            <InfoRow
+              icon={<CalendarDays size={15} className="text-slate-500" />}
+              label="Member since"
+              bg="bg-slate-100 dark:bg-slate-700/40"
+            >
+              <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                {new Date(user.createdAt).toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </span>
+            </InfoRow>
           )}
         </div>
       </div>
 
-      {/* Edit Mode Footer */}
+      {/* Sticky edit footer */}
       {isEditing && (
-        <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-          <div className="flex gap-3">
-            <button
-              onClick={() => setIsEditing(false)}
-              className="flex-1 py-2.5 px-4 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className="flex-1 py-2.5 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors text-sm"
-            >
-              <Save size={16} />
-              Save Changes
-            </button>
-          </div>
+        <div className="shrink-0 flex gap-3 px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <button
+            onClick={handleCancel}
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2 transition-colors shadow-sm shadow-blue-500/30"
+          >
+            <Check size={16} />
+            Save Changes
+          </button>
         </div>
       )}
     </div>
   );
 };
+
+/* ── Small layout helpers ── */
+
+const Section: React.FC<{
+  label: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ label, icon, children }) => (
+  <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4">
+    <div className="flex items-center gap-2 mb-3">
+      {icon}
+      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+        {label}
+      </span>
+    </div>
+    {children}
+  </div>
+);
+
+const InfoRow: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  bg: string;
+  children: React.ReactNode;
+}> = ({ icon, label, bg, children }) => (
+  <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 dark:bg-slate-700/30 rounded-xl">
+    <div className={`p-2 rounded-lg ${bg} shrink-0`}>
+      {icon}
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-xs text-slate-400 dark:text-slate-500 mb-0.5">{label}</p>
+      {children}
+    </div>
+  </div>
+);
 
 export default MyProfile;

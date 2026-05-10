@@ -1,7 +1,14 @@
 import { io } from "socket.io-client";
 
-export const socket = io("http://localhost:5000", {
+const SOCKET_URL = import.meta.env.VITE_AUTH_BASE_URL || "http://localhost:5000";
+
+export const socket = io(SOCKET_URL, {
   withCredentials: true,
-  transports: ["websocket", "polling"], // important
-  autoConnect: false, // we control when it connects
+  transports: ["websocket", "polling"],
+  autoConnect: false,
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  reconnectionAttempts: Infinity,
+  timeout: 10000,
 });

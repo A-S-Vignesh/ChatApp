@@ -33,7 +33,7 @@ export interface Chat {
   messages: Message[];
 }
 
-export type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark' | 'system';
 
 export interface NotificationSettings {
   previews: boolean;

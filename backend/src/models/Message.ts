@@ -6,6 +6,8 @@ export interface IMessage extends Document {
   content: string;
   type: "text" | "image" | "file";
   readBy: Types.ObjectId[];
+  deliveredTo: Types.ObjectId[];
+  clientId?: string;
 }
 
 const messageSchema = new Schema<IMessage>(
@@ -40,11 +42,26 @@ const messageSchema = new Schema<IMessage>(
         ref: "User",
       },
     ],
+    deliveredTo: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+
+    /* Idempotency key supplied by sending client. Lets retries dedupe. */
+    clientId: {
+      type: String,
+    },
   },
   { timestamps: true }
 );
 
 messageSchema.index({ chatId: 1, createdAt: -1 });
+messageSchema.index(
+  { sender: 1, clientId: 1 },
+  { unique: true, partialFilterExpression: { clientId: { $type: "string" } } }
+);
 
 
 export default model<IMessage>("Message", messageSchema);

@@ -1,14 +1,29 @@
 import React, { useState, useRef, useEffect } from "react";
-import { MessageStatus } from "../../types";
-import { Check, CheckCheck, SmilePlus } from "lucide-react";
+import { Clock, Check, CheckCheck, SmilePlus, AlertCircle } from "lucide-react";
 import Avatar from "./Avatar";
-import { authClient } from "../lib/authClient";
-import { MessageType, MessageViewType } from "../types/message";
+import { MessageViewType } from "../types/message";
 
 interface MessageProps {
   message: MessageViewType;
   userAvatar: string;
+  userName?: string;
   onToggleReaction: (emoji: string) => void;
+  highlight?: string;
+}
+
+function highlightText(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const parts = text.split(new RegExp(`(${escaped})`, "gi"));
+  return parts.map((part, i) =>
+    part.toLowerCase() === query.toLowerCase() ? (
+      <mark key={i} className="bg-yellow-200 dark:bg-yellow-500/40 text-current rounded px-0.5">
+        {part}
+      </mark>
+    ) : (
+      <React.Fragment key={i}>{part}</React.Fragment>
+    )
+  );
 }
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
@@ -59,33 +74,43 @@ const EmojiPicker: React.FC<{
 const Message: React.FC<MessageProps> = ({
   message,
   userAvatar,
+  userName = "User",
   onToggleReaction,
+  highlight = "",
 }: MessageProps) => {
   const isMe = message.sender === "me";
   const [showPicker, setShowPicker] = useState(false);
-  console.log("message", message);
-
 
   const renderStatusIcon = () => {
-    let status = "sent";
+    if (!isMe) return null;
 
-    if (message.readBy.length > 1) {
-      status = "read";
-    } else if (message.readBy.length === 1) {
-      status = "delivered";
+    /* Optimistic / still sending — distinguish "failed" so the user can see
+       that the outbox gave up after retries. */
+    if (message._id.startsWith("temp-")) {
+      if (message._outboxStatus === "failed") {
+        return (
+          <AlertCircle
+            size={14}
+            className="text-red-300"
+            aria-label="Failed to send"
+          />
+        );
+      }
+      return <Clock size={14} className="text-blue-200 opacity-70" />;
     }
 
-    console.log("status", status);
-    switch (status) {
-      case MessageStatus.SENT:
-        return <Check size={16} className="text-white" />;
-      case MessageStatus.DELIVERED:
-        return <CheckCheck size={16} className="text-white" />;
-      case MessageStatus.READ:
-        return <CheckCheck size={16} className="text-blue-950" />;
-      default:
-        return null;
+    /* Read — other party has opened the chat */
+    if (message.readBy && message.readBy.length > 1) {
+      return <CheckCheck size={16} className="text-white" />;
     }
+
+    /* Delivered — other party's device received it */
+    if (message.deliveredTo && message.deliveredTo.length > 1) {
+      return <CheckCheck size={16} className="text-blue-200" />;
+    }
+
+    /* Sent — saved to server */
+    return <Check size={16} className="text-blue-200" />;
   };
 
   const handleSelectEmoji = (emoji: string) => {
@@ -97,7 +122,7 @@ const Message: React.FC<MessageProps> = ({
     <div className={`flex items-start gap-3 ${isMe ? "flex-row-reverse" : ""}`}>
       {!isMe && (
         <div className="shrink-0">
-          <Avatar src={userAvatar} alt="user avatar" size="sm" />
+          <Avatar src={userAvatar} alt={userName} size="sm" />
         </div>
       )}
       <div className="flex flex-col">
@@ -118,10 +143,10 @@ const Message: React.FC<MessageProps> = ({
             }`}
           >
             <p className="text-sm leading-relaxed wrap-break-word whitespace-pre-wrap">
-              {message.content}
+              {highlight ? highlightText(message.content, highlight) : message.content}
             </p>
             <div
-              className={`flex items-center gap-2 mt-1 ${
+              className={`flex items-center gap-1 mt-1 ${
                 isMe ? "justify-end" : "justify-start"
               }`}
             >
@@ -132,7 +157,7 @@ const Message: React.FC<MessageProps> = ({
               >
                 {message.timestamp}
               </span>
-              {isMe && renderStatusIcon()}
+              {renderStatusIcon()}
             </div>
           </div>
 
@@ -154,47 +179,6 @@ const Message: React.FC<MessageProps> = ({
             </button>
           </div>
         </div>
-
-        {/* {message.reactions && message.reactions.length > 0 && (
-          <div
-            className={`flex gap-1 mt-1 z-10 relative ${
-              isMe ? "justify-end" : ""
-            } ${!isMe ? "pl-2" : "pr-2"}`}
-          >
-            {message.reactions.map((reaction) => {
-              const hasReacted = reaction.users.includes("me");
-              return (
-                <button
-                  key={reaction.emoji}
-                  onClick={() => onToggleReaction(reaction.emoji)}
-                  className={`px-2 py-0.5 text-xs rounded-full border flex items-center gap-1 transition-colors ${
-                    hasReacted
-                      ? "bg-blue-100 dark:bg-blue-900/50 border-blue-300 dark:border-blue-700"
-                      : "bg-slate-100 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 hover:bg-slate-200 dark:hover:bg-slate-600/50"
-                  }`}
-                  aria-label={`You and ${
-                    reaction.users.length - 1
-                  } others reacted with ${reaction.emoji}`}
-                >
-                  <span className="text-base leading-none">
-                    {reaction.emoji}
-                  </span>
-                  {reaction.users.length > 0 && (
-                    <span
-                      className={`font-semibold ${
-                        hasReacted
-                          ? "text-blue-600 dark:text-blue-300"
-                          : "text-slate-600 dark:text-slate-400"
-                      }`}
-                    >
-                      {reaction.users.length}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )} */}
       </div>
     </div>
   );

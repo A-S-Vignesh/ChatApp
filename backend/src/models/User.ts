@@ -16,6 +16,12 @@ const userSchema = new Schema(
     status: {
       type: String, // "Online" | "Busy" | "Away"
     },
+    /* Per-user notification settings. Persisted server-side so they apply
+       across devices and so push notifications can honor `previews`. */
+    notificationSettings: {
+      previews: { type: Boolean, default: true },
+      sounds: { type: Boolean, default: true },
+    },
   },
   {
     timestamps: true,

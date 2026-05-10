@@ -23,6 +23,10 @@ export type ChatType = {
   // 🔥 WhatsApp-style unread badge
   unreadCount: number;
 
+  /* True when the current user has muted this chat (computed server-side from
+     mutedBy). Drives the bell icon in the header and skips push notifications. */
+  mutedByMe?: boolean;
+
   createdAt?: string;
   updatedAt: string;
 };

@@ -1,19 +1,23 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Smile, Paperclip, Mic, Send } from "lucide-react";
 import EmojiPicker, { EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
-
+import { socket } from "../lib/socket";
 
 interface ChatInputProps {
   onSendMessage: (messageText: string) => void;
+  chatId: string;
   disabled?: boolean;
 }
 
+const TYPING_STOP_DELAY = 2000;
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
+const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, chatId }) => {
   const [inputText, setInputText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const emojiRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -50,14 +54,41 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
     };
   }, [showEmoji]);
 
+  /* Stop typing when chat changes or component unmounts */
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (isTypingRef.current) {
+        socket.emit("typing:stop", { chatId });
+        isTypingRef.current = false;
+      }
+    };
+  }, [chatId]);
 
+  const emitTypingStop = () => {
+    socket.emit("typing:stop", { chatId });
+    isTypingRef.current = false;
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputText(e.target.value);
+
+    if (!isTypingRef.current) {
+      socket.emit("typing:start", { chatId });
+      isTypingRef.current = true;
+    }
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(emitTypingStop, TYPING_STOP_DELAY);
+  };
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    console.log("inputText", inputText);
 
     const trimmedText = inputText.trim();
     if (trimmedText) {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      emitTypingStop();
       onSendMessage(trimmedText);
       setInputText("");
     }
@@ -73,7 +104,6 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
     setInputText((prev) => {
       const updated = prev.substring(0, start) + emoji + prev.substring(end);
 
-      // Restore cursor AFTER state update
       requestAnimationFrame(() => {
         textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
         textarea.focus();
@@ -87,10 +117,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
     insertAtCursor(emojiData.emoji);
   };
 
-
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Send message on Enter, but allow new line with Shift+Enter
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -127,6 +154,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
           <div ref={emojiRef} className="absolute bottom-16 left-4 z-50">
             <EmojiPicker
               onEmojiClick={handleEmojiClick}
+              emojiStyle={EmojiStyle.NATIVE}
               theme={emojiTheme}
               className="bg-slate-200 dark:bg-slate-950"
               height={400}
@@ -139,7 +167,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
         <textarea
           ref={textareaRef}
           value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder="Type a message..."
           rows={1}
@@ -152,7 +180,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
             overflow-y-hidden
             focus:outline-none focus:ring-2 focus:ring-blue-500
             transition-height duration-150
-  "
+          "
           style={{ maxHeight: "120px" }}
         />
 
@@ -160,9 +188,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
         <button
           type="submit"
           className="p-3 rounded-full bg-blue-500 text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform duration-150 transform active:scale-95"
-          aria-label={
-            inputText.trim() ? "Send message" : "Record voice message"
-          }
+          aria-label={inputText.trim() ? "Send message" : "Record voice message"}
         >
           {inputText.trim() ? <Send size={20} /> : <Mic size={20} />}
         </button>

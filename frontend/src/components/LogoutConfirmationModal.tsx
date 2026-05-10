@@ -1,5 +1,5 @@
-import React from 'react';
-import { LogOut } from 'lucide-react';
+import React from "react";
+import { LogOut } from "lucide-react";
 
 interface LogoutConfirmationModalProps {
   isOpen: boolean;
@@ -7,44 +7,57 @@ interface LogoutConfirmationModalProps {
   onConfirm: () => void;
 }
 
-const LogoutConfirmationModal: React.FC<LogoutConfirmationModalProps> = ({ isOpen, onClose, onConfirm }) => {
-  if (!isOpen) {
-    return null;
-  }
+const LogoutConfirmationModal: React.FC<LogoutConfirmationModalProps> = ({
+  isOpen,
+  onClose,
+  onConfirm,
+}) => {
+  if (!isOpen) return null;
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 transition-opacity duration-300"
-      aria-labelledby="logout-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="logout-modal-title"
+      onClick={(e: React.MouseEvent<HTMLDivElement>) =>
+        e.target === e.currentTarget && onClose()
+      }
     >
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm p-6 text-center transform transition-all duration-300 scale-100">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-          <LogOut className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
+      <div className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="p-6 space-y-3">
+          <div className="flex items-start gap-4">
+            <div className="shrink-0 p-3 rounded-xl bg-red-100 dark:bg-red-900/30">
+              <LogOut size={22} className="text-red-600 dark:text-red-400" />
+            </div>
+            <div>
+              <h3
+                id="logout-modal-title"
+                className="text-base font-semibold text-slate-900 dark:text-white"
+              >
+                Sign out?
+              </h3>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                You'll need to sign in again to access your conversations.
+              </p>
+            </div>
+          </div>
         </div>
-        <h3 id="logout-modal-title" className="mt-4 text-lg font-semibold leading-6 text-slate-900 dark:text-slate-100">
-          Confirm Logout
-        </h3>
-        <div className="mt-2">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Are you sure you want to log out of your account?
-          </p>
-        </div>
-        <div className="mt-6 flex justify-center gap-4">
+
+        <div className="flex gap-3 px-6 pb-5">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 dark:focus:ring-offset-slate-800 transition-colors"
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 dark:focus:ring-offset-slate-800 transition-colors"
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl text-white bg-red-600 hover:bg-red-700 active:bg-red-800 transition-colors"
           >
-            Logout
+            Sign out
           </button>
         </div>
       </div>

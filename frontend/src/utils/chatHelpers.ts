@@ -3,6 +3,7 @@ import { ChatType } from "../types/chat";
 export function getChatDisplayUser(chat: ChatType, currentUserId: string) {
   if (chat.isGroup) {
     return {
+      _id: "",
       name: chat.name || "Group Chat",
       image: undefined,
       isOnline: false,
@@ -12,10 +13,10 @@ export function getChatDisplayUser(chat: ChatType, currentUserId: string) {
 
   // direct chat → show the OTHER user
   const otherUser = chat.participants.find((u) => u._id !== currentUserId);
-
-  console.log("Other user", otherUser);
+  // console.log("otherUser", otherUser);
 
   return {
+    _id: otherUser?._id ?? "",
     name: otherUser?.name ?? "Unknown",
     image: otherUser?.image,
     isOnline: otherUser?.isOnline,

@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { MessagesSquare } from "lucide-react";
-import { useSendMessage } from "../hooks/useSendMessage";
+import { useSendMessage, makeClientId } from "../hooks/useSendMessage";
 
 import Message from "./Message";
 import ChatInput from "./ChatInput";
@@ -23,6 +23,11 @@ interface ChatWindowProps {
   onBack: () => void;
   onViewProfile: (user: UserType) => void;
   onToggleReaction: (chatId: string, messageId: string, emoji: string) => void;
+  typingUserIds?: string[];
+  isMuted?: boolean;
+  onToggleMute?: () => void;
+  onClearChat?: () => void;
+  onDeleteChat?: () => void;
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({
@@ -33,10 +38,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onBack,
   onViewProfile,
   onToggleReaction,
+  typingUserIds = [],
+  isMuted = false,
+  onToggleMute,
+  onClearChat,
+  onDeleteChat,
 }: ChatWindowProps) => {
   const { data: messageData, isLoading } = useMessages(chatId);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const messages = messageData?.messages ?? [];
+
+  const displayedMessages = searchQuery.trim()
+    ? messages.filter((msg) =>
+        msg.content?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : messages;
 
   const { mutate: sendMessage, isPending } = useSendMessage(
     chatId!,
@@ -44,10 +61,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   );
 
   const handleSendMessage = (text: string) => {
-    console.log("text", text);
     if (!chatId || !text.trim()) return;
-    console.log("Successfull came here");
-    sendMessage(text);
+    sendMessage({ content: text, clientId: makeClientId() });
   };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -57,7 +72,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     if (!chatId) return;
 
     api.get(`/chat/${chatId}/read`).then(() => {
-      // reset unread count immediately
       queryClient.setQueryData(["chats"], (old: any[]) =>
         old?.map((chat) =>
           chat._id === chatId ? { ...chat, unreadCount: 0 } : chat
@@ -66,13 +80,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     });
   }, [chatId]);
 
-
-  /* Auto scroll */
+  /* Reset search when switching chats */
+  const prevChatIdRef = useRef(chatId);
   useEffect(() => {
-    if (messages.length) {
+    if (prevChatIdRef.current !== chatId) {
+      prevChatIdRef.current = chatId;
+      setSearchQuery("");
+    }
+  }, [chatId]);
+
+  /* Auto scroll — only when not searching */
+  useEffect(() => {
+    if (messages.length && !searchQuery) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages]);
+  }, [messages, searchQuery]);
 
   /* Empty state */
   if (!chatId || !chat) {
@@ -87,29 +109,54 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     );
   }
 
-  console.log("Chat in chat window", chat);
-  console.log("Message in chat window", messages);
-  console.log("current user Id in chat window", currentUserId);
   const otherUser = getChatDisplayUser(chat, currentUserId);
+  const isTyping = typingUserIds.includes(otherUser._id);
 
   return (
     <main className="grow h-full flex flex-col">
-      {/* Header */}
-      <Header user={otherUser} onBack={onBack} onViewProfile={onViewProfile} />
+      <Header
+        user={otherUser as unknown as UserType}
+        onBack={onBack}
+        onViewProfile={onViewProfile}
+        isTyping={isTyping}
+        isMuted={isMuted}
+        onToggleMute={onToggleMute}
+        onClearChat={onClearChat}
+        onDeleteChat={onDeleteChat}
+        onSearchChange={setSearchQuery}
+      />
+
+      {/* Search results banner */}
+      {searchQuery.trim() && (
+        <div className="shrink-0 px-4 py-1.5 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800/50 flex items-center justify-between text-xs">
+          <span className="text-blue-600 dark:text-blue-400 font-medium">
+            {displayedMessages.length} result{displayedMessages.length !== 1 ? "s" : ""} for &ldquo;{searchQuery}&rdquo;
+          </span>
+          {displayedMessages.length === 0 && (
+            <span className="text-slate-400 dark:text-slate-500">No messages match</span>
+          )}
+        </div>
+      )}
 
       {/* Messages */}
-      <div
-        className="grow p-6 overflow-y-auto bg-slate-100 dark:bg-slate-900 chat-bg custom-scroll"
-        // style={{
-        //   backgroundImage:
-        //     "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4e3ff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
-        // }}
-      >
+      <div className="grow p-6 overflow-y-auto bg-slate-100 dark:bg-slate-900 chat-bg custom-scroll">
         {isLoading ? (
           <p className="text-center text-slate-500">Loading messages…</p>
+        ) : displayedMessages.length === 0 && !searchQuery.trim() ? (
+          <div className="flex flex-col items-center justify-center h-full text-center px-6">
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-full mb-4">
+              <MessagesSquare size={40} className="text-blue-300 dark:text-blue-400" />
+            </div>
+            <h3 className="text-base font-semibold text-slate-700 dark:text-slate-200">
+              No messages yet
+            </h3>
+            <p className="mt-1 text-sm text-slate-400 dark:text-slate-500 leading-relaxed">
+              Say hello! Send your first message to start the conversation.
+            </p>
+          </div>
         ) : (
           <div className="space-y-4">
-            {messages.map((msg) => {
+            {displayedMessages.map((msg) => {
               const isMe = msg.sender._id === currentUserId;
 
               return (
@@ -123,8 +170,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                       minute: "2-digit",
                     }),
                   }}
-                  userAvatar={otherUser.image}
-                  onToggleReaction={(emoji) =>
+                  userAvatar={otherUser.image ?? ""}
+                  userName={otherUser.name}
+                  highlight={searchQuery}
+                  onToggleReaction={(emoji: string) =>
                     onToggleReaction(chat._id, msg._id, emoji)
                   }
                 />
@@ -136,8 +185,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         )}
       </div>
 
-      {/* Input */}
-      <ChatInput onSendMessage={handleSendMessage} disabled={isPending} />
+      <ChatInput onSendMessage={handleSendMessage} chatId={chatId!} disabled={isPending} />
     </main>
   );
 };

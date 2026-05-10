@@ -37,9 +37,11 @@ export const auth = betterAuth({
     modelName: "sessions",
   },
 
-  /* 🔑 Email + Password */
+  /* 🔑 Email + Password — disabled. Google-only login removes the
+     credential brute-force surface. Flip back to `true` when you want
+     to re-enable, and add a rate limiter on /api/auth/* at the same time. */
   emailAndPassword: {
-    enabled: true,
+    enabled: false,
   },
 
   /* ✉️ Email Verification */

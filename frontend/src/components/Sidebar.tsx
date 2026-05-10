@@ -26,6 +26,7 @@ interface SidebarProps {
   onShowHelp: () => void;
   onLogout: () => void;
   onShowAddNewChat: () => void;
+  typingByChatId?: Record<string, string[]>;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -40,7 +41,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onShowHelp,
   onLogout,
   onShowAddNewChat,
-}:SidebarProps) => {
+  typingByChatId = {},
+}: SidebarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -197,19 +199,34 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Chat List */}
       <div className="grow overflow-y-auto">
+        {chats.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-full mb-4">
+              <MessageSquarePlus size={32} className="text-blue-300 dark:text-blue-400" />
+            </div>
+            <h3 className="text-base font-semibold text-slate-700 dark:text-slate-200">
+              No conversations yet
+            </h3>
+            <p className="mt-1 text-sm text-slate-400 dark:text-slate-500 leading-relaxed">
+              Tap the icon above to start a new chat.
+            </p>
+          </div>
+        ) : (
         <ul className="space-y-1 p-2">
           {chats.map((chat) => {
             const displayUser = getChatDisplayUser(chat, currentUserId);
+            // console.log("Display user for chat", chat._id, "is", displayUser.image);
             const lastMsg = getLastMessage(chat);
-
-            console.log("displayUser", displayUser);
+            const isActive = activeChatId === chat._id;
+            const hasUnread = !isActive && chat.unreadCount > 0;
+            const isSomeoneTyping = (typingByChatId[chat._id] ?? []).length > 0;
 
             return (
               <li key={chat._id}>
                 <button
                   onClick={() => onSelectChat(chat._id)}
                   className={`w-full flex items-center p-3 rounded-lg text-left transition-colors duration-200 ${
-                    activeChatId === chat._id
+                    isActive
                       ? "bg-blue-500 text-white"
                       : "hover:bg-slate-100 dark:hover:bg-slate-700"
                   }`}
@@ -223,10 +240,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                   <div className="grow ml-4 min-w-0">
                     <div className="flex items-center justify-between">
                       <h3
-                        className={`font-semibold truncate ${
-                          activeChatId === chat._id
-                            ? "text-white"
-                            : "text-slate-800 dark:text-slate-100"
+                        className={`truncate ${
+                          isActive
+                            ? "font-semibold text-white"
+                            : hasUnread
+                            ? "font-bold text-slate-900 dark:text-white"
+                            : "font-medium text-slate-800 dark:text-slate-100"
                         }`}
                       >
                         {displayUser.name}
@@ -234,28 +253,42 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                       {lastMsg && (
                         <span
-                          className={`text-xs whitespace-nowrap ${
-                            activeChatId === chat._id
+                          className={`text-xs whitespace-nowrap ml-2 ${
+                            isActive
                               ? "text-blue-200"
-                              : "text-slate-500 dark:text-slate-400"
+                              : hasUnread
+                              ? "font-semibold text-blue-500 dark:text-blue-400"
+                              : "text-slate-400 dark:text-slate-500"
                           }`}
                         >
                           {lastMsg.timestamp}
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center justify-between">
-                      <p
-                        className={`text-sm truncate ${
-                          activeChatId === chat._id
-                            ? "text-blue-100"
-                            : "text-slate-500 dark:text-slate-400"
-                        }`}
-                      >
-                        {lastMsg?.text ?? "No messages yet"}
-                      </p>
-                      {chat.unreadCount > 0 && (
-                        <span className="bg-blue-500 text-white text-xs px-2 rounded-full">
+
+                    <div className="flex items-center justify-between gap-2">
+                      {isSomeoneTyping ? (
+                        <p className={`text-sm truncate italic ${
+                          isActive ? "text-blue-100" : "text-blue-500 dark:text-blue-400"
+                        }`}>
+                          typing...
+                        </p>
+                      ) : (
+                        <p
+                          className={`text-sm truncate ${
+                            isActive
+                              ? "text-blue-100"
+                              : hasUnread
+                              ? "font-semibold text-slate-800 dark:text-slate-200"
+                              : "text-slate-500 dark:text-slate-400"
+                          }`}
+                        >
+                          {lastMsg?.text ?? "No messages yet"}
+                        </p>
+                      )}
+
+                      {hasUnread && (
+                        <span className="shrink-0 bg-blue-500 text-white text-xs font-bold min-w-5 h-5 px-1.5 rounded-full flex items-center justify-center">
                           {chat.unreadCount}
                         </span>
                       )}
@@ -266,6 +299,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
         </ul>
+        )}
       </div>
     </aside>
   );
