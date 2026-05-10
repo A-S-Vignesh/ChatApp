@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import type { User } from "../../types";
 import {
   X,
   Edit3,
@@ -11,37 +10,36 @@ import {
   Calendar,
   User as UserIcon,
 } from "lucide-react";
-import { UserType } from "../types/user";
+import { useProfile, useUpdateProfile } from "../hooks/useProfile";
 
 interface MyProfileProps {
-  user: UserType;
   onClose: () => void;
-  onUpdateProfile: (updatedUser: User) => void;
 }
 
-const MyProfile: React.FC<MyProfileProps> = ({
-  user,
-  onClose,
-  onUpdateProfile,
-}: MyProfileProps) => {
+const MyProfile: React.FC<MyProfileProps> = ({ onClose }: MyProfileProps) => {
+  const { data: profile, isLoading } = useProfile();
+  const { mutate: updateProfile, isPending: isSaving } = useUpdateProfile();
+
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
-    name: user.name,
-    about: user.about || "",
-    phone: user.phone || "",
-    location: user.location || "",
+    name: "",
+    about: "",
+    phone: "",
+    location: "",
   });
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!profile) return;
     if (!isEditing) {
       setFormData({
-        name: user.name,
-        about: user.about || "",
-        phone: user.phone || "",
-        location: user.location || "",
+        name: profile.name ?? "",
+        about: profile.about ?? "",
+        phone: profile.phone ?? "",
+        location: profile.location ?? "",
       });
     }
-  }, [user, isEditing]);
+  }, [profile, isEditing]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -51,9 +49,39 @@ const MyProfile: React.FC<MyProfileProps> = ({
   };
 
   const handleSave = () => {
-    onUpdateProfile({ ...user, ...formData });
-    setIsEditing(false);
+    if (!profile) return;
+    setError(null);
+
+    /* only send fields that actually changed */
+    const patch: Record<string, string> = {};
+    if (formData.name.trim() && formData.name !== (profile.name ?? "")) {
+      patch.name = formData.name.trim();
+    }
+    if (formData.about !== (profile.about ?? "")) patch.about = formData.about;
+    if (formData.phone !== (profile.phone ?? "")) patch.phone = formData.phone;
+    if (formData.location !== (profile.location ?? "")) {
+      patch.location = formData.location;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      setIsEditing(false);
+      return;
+    }
+
+    updateProfile(patch, {
+      onSuccess: () => setIsEditing(false),
+      onError: (err: any) =>
+        setError(err?.response?.data?.message ?? "Failed to save profile"),
+    });
   };
+
+  if (isLoading || !profile) {
+    return (
+      <div className="h-full flex items-center justify-center bg-white dark:bg-slate-800 text-slate-500">
+        Loading profile…
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-slate-800">
@@ -82,25 +110,32 @@ const MyProfile: React.FC<MyProfileProps> = ({
         )}
       </div>
 
-      {/* Content - Non-scrollable */}
+      {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         {/* Profile Picture & Basic Info */}
         <div className="flex flex-col items-center mb-8">
           <div className="relative mb-4">
             <img
               className="w-28 h-28 rounded-full object-cover border-4 border-white dark:border-slate-800 shadow-lg"
-              src={user.image}
-              alt={user.name}
+              src={
+                profile.image ??
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                  profile.name ?? "User"
+                )}&background=3b82f6&color=fff&size=112`
+              }
+              alt={profile.name ?? "User"}
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
                 target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                  user.name
+                  profile.name ?? "User"
                 )}&background=3b82f6&color=fff&size=112`;
               }}
             />
-            <div className="absolute bottom-2 right-2 w-6 h-6 bg-green-500 rounded-full border-3 border-white dark:border-slate-800 flex items-center justify-center">
-              <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-            </div>
+            {profile.isOnline && (
+              <div className="absolute bottom-2 right-2 w-6 h-6 bg-green-500 rounded-full border-3 border-white dark:border-slate-800 flex items-center justify-center">
+                <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+              </div>
+            )}
           </div>
 
           <div className="text-center">
@@ -117,13 +152,13 @@ const MyProfile: React.FC<MyProfileProps> = ({
               ) : (
                 <>
                   <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-                    {user.name}
+                    {profile.name ?? "Unnamed"}
                   </h2>
-                  {user.emailVerified && (
+                  {profile.emailVerified && (
                     <CheckCircle
                       size={18}
                       className="text-blue-500"
-                      title="Verified account"
+                      aria-label="Verified account"
                     />
                   )}
                 </>
@@ -133,12 +168,12 @@ const MyProfile: React.FC<MyProfileProps> = ({
             <div className="flex items-center justify-center gap-2">
               <div
                 className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  user.isOnline
+                  profile.isOnline
                     ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
                     : "bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300"
                 }`}
               >
-                {user.isOnline ? "Online" : "Offline"}
+                {profile.isOnline ? "Online" : "Offline"}
               </div>
             </div>
           </div>
@@ -165,8 +200,8 @@ const MyProfile: React.FC<MyProfileProps> = ({
               placeholder="Tell something about yourself..."
             />
           ) : (
-            <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed bg-slate-50 dark:bg-slate-700/50 rounded-lg p-4">
-              {user.about || "No bio yet"}
+            <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed bg-slate-50 dark:bg-slate-700/50 rounded-lg p-4 whitespace-pre-wrap">
+              {profile.about || "No bio yet"}
             </p>
           )}
         </div>
@@ -184,9 +219,9 @@ const MyProfile: React.FC<MyProfileProps> = ({
               </p>
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
-                  {user.email}
+                  {profile.email}
                 </p>
-                {user.emailVerified ? (
+                {profile.emailVerified ? (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs">
                     <CheckCircle size={10} />
                     Verified
@@ -223,7 +258,7 @@ const MyProfile: React.FC<MyProfileProps> = ({
                 />
               ) : (
                 <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                  {user.phone || "Not added"}
+                  {profile.phone || "Not added"}
                 </p>
               )}
             </div>
@@ -252,14 +287,14 @@ const MyProfile: React.FC<MyProfileProps> = ({
                 />
               ) : (
                 <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                  {user.location || "Not added"}
+                  {profile.location || "Not added"}
                 </p>
               )}
             </div>
           </div>
 
           {/* Member Since */}
-          {user.createdAt && (
+          {profile.createdAt && (
             <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
               <div className="p-2 bg-slate-200 dark:bg-slate-600 rounded-lg">
                 <Calendar
@@ -272,7 +307,7 @@ const MyProfile: React.FC<MyProfileProps> = ({
                   Member since
                 </p>
                 <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                  {new Date(user.createdAt).toLocaleDateString("en-US", {
+                  {new Date(profile.createdAt).toLocaleDateString("en-US", {
                     month: "long",
                     day: "numeric",
                     year: "numeric",
@@ -282,6 +317,10 @@ const MyProfile: React.FC<MyProfileProps> = ({
             </div>
           )}
         </div>
+
+        {error && (
+          <p className="text-sm text-red-500 mt-4 text-center">{error}</p>
+        )}
       </div>
 
       {/* Edit Mode Footer */}
@@ -289,17 +328,22 @@ const MyProfile: React.FC<MyProfileProps> = ({
         <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
           <div className="flex gap-3">
             <button
-              onClick={() => setIsEditing(false)}
-              className="flex-1 py-2.5 px-4 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm"
+              onClick={() => {
+                setIsEditing(false);
+                setError(null);
+              }}
+              disabled={isSaving}
+              className="flex-1 py-2.5 px-4 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="flex-1 py-2.5 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors text-sm"
+              disabled={isSaving}
+              className="flex-1 py-2.5 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors text-sm disabled:opacity-60"
             >
               <Save size={16} />
-              Save Changes
+              {isSaving ? "Saving…" : "Save Changes"}
             </button>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 import { api } from "../lib/api";
 import { ChatType } from "../types/chat";
-import axios from "axios";
 
 export function useCreateChat() {
   const queryClient = useQueryClient();
@@ -14,20 +14,17 @@ export function useCreateChat() {
       queryClient.setQueryData<ChatType[]>(["chats"], (oldChats = []) => {
         const exists = oldChats.some((chat) => chat._id === newChat._id);
         if (exists) return oldChats;
-
-        // WhatsApp-style: newest chat on top
         return [newChat, ...oldChats];
       });
 
       return newChat;
-    } catch (error: any) {
-      // ⬇️ Normalize backend error
+    } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         throw new Error(
-          error.response?.data?.message || "Failed to create chat"
+          (error.response?.data as { message?: string } | undefined)?.message ||
+            "Failed to create chat"
         );
       }
-
       throw new Error("Something went wrong");
     }
   };

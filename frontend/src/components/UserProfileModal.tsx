@@ -10,7 +10,6 @@ interface UserProfileProps {
 
 const UserProfile: React.FC<UserProfileProps> = ({ user, onClose }: UserProfileProps) => {
   if (!user) return null;
-  console.log("user in userProfile",user)
   return (
     <aside
       className="bg-white dark:bg-slate-800 w-full h-full flex flex-col"

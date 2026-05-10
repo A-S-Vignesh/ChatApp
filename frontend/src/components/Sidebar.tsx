@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 
 import {
   Search,
@@ -10,7 +10,6 @@ import {
   LogOut,
 } from "lucide-react";
 import Avatar from "./Avatar";
-import { useChats } from "../hooks/useChats";
 import { ChatType } from "../types/chat";
 import { getChatDisplayUser, getLastMessage } from "../utils/chatHelpers";
 
@@ -42,9 +41,19 @@ const Sidebar: React.FC<SidebarProps> = ({
   onShowAddNewChat,
 }:SidebarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
 
-  console.log("Chats", chats);
+  const filteredChats = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return chats;
+    return chats.filter((chat) => {
+      const displayUser = getChatDisplayUser(chat, currentUserId);
+      const name = (displayUser.name ?? "").toLowerCase();
+      const lastText = (chat.lastMessage?.content ?? "").toLowerCase();
+      return name.includes(q) || lastText.includes(q);
+    });
+  }, [chats, currentUserId, searchQuery]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -189,6 +198,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           />
           <input
             type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search chats..."
             className="w-full pl-10 pr-4 py-2 rounded-full bg-slate-100 dark:bg-slate-700 border border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-800 dark:text-slate-200"
           />
@@ -197,12 +208,15 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Chat List */}
       <div className="grow overflow-y-auto">
+        {filteredChats.length === 0 && searchQuery.trim() && (
+          <p className="text-center text-sm text-slate-500 dark:text-slate-400 px-4 py-6">
+            No chats match "{searchQuery}"
+          </p>
+        )}
         <ul className="space-y-1 p-2">
-          {chats.map((chat) => {
+          {filteredChats.map((chat) => {
             const displayUser = getChatDisplayUser(chat, currentUserId);
             const lastMsg = getLastMessage(chat);
-
-            console.log("displayUser", displayUser);
 
             return (
               <li key={chat._id}>

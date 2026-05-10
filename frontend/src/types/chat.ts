@@ -5,6 +5,10 @@ export type ChatType = {
   // Group chat only
   name?: string;
 
+  // Group admin (only for groups). Aggregation returns the raw ObjectId as a string;
+  // create/update endpoints may return a populated object — handle both.
+  createdBy?: string | { _id: string };
+
   // Populated users
   participants: ChatUser[];
 

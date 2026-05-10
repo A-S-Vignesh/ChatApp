@@ -1,12 +1,27 @@
 import { Schema, model, Types, Document } from "mongoose";
 
+export interface IReaction {
+  emoji: string;
+  users: Types.ObjectId[];
+}
+
 export interface IMessage extends Document {
   chatId: Types.ObjectId;
   sender: Types.ObjectId;
   content: string;
   type: "text" | "image" | "file";
   readBy: Types.ObjectId[];
+  deliveredTo: Types.ObjectId[];
+  reactions: IReaction[];
 }
+
+const reactionSchema = new Schema<IReaction>(
+  {
+    emoji: { type: String, required: true },
+    users: [{ type: Schema.Types.ObjectId, ref: "User" }],
+  },
+  { _id: false }
+);
 
 const messageSchema = new Schema<IMessage>(
   {
@@ -40,6 +55,18 @@ const messageSchema = new Schema<IMessage>(
         ref: "User",
       },
     ],
+
+    deliveredTo: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+
+    reactions: {
+      type: [reactionSchema],
+      default: [],
+    },
   },
   { timestamps: true }
 );

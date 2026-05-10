@@ -1,19 +1,21 @@
 import React, { useState, useRef, useEffect } from "react";
-import { MessageStatus } from "../../types";
-import { Check, CheckCheck, SmilePlus } from "lucide-react";
+import { Check, CheckCheck, Clock, SmilePlus } from "lucide-react";
 import Avatar from "./Avatar";
-import { authClient } from "../lib/authClient";
-import { MessageType, MessageViewType } from "../types/message";
+import { MessageViewType } from "../types/message";
+import { useToggleReaction } from "../hooks/useToggleReaction";
 
 interface MessageProps {
   message: MessageViewType;
-  userAvatar: string;
-  onToggleReaction: (emoji: string) => void;
+  isMe: boolean;
+  showSenderName: boolean;
+  participantCount: number;
+  currentUserId: string;
+  chatId: string;
 }
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
-const EmojiPicker: React.FC<{
+const ReactionPicker: React.FC<{
   onSelect: (emoji: string) => void;
   onClose: () => void;
   isMe: boolean;
@@ -30,9 +32,7 @@ const EmojiPicker: React.FC<{
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [onClose]);
 
   return (
@@ -58,52 +58,71 @@ const EmojiPicker: React.FC<{
 
 const Message: React.FC<MessageProps> = ({
   message,
-  userAvatar,
-  onToggleReaction,
+  isMe,
+  showSenderName,
+  participantCount,
+  currentUserId,
+  chatId,
 }: MessageProps) => {
-  const isMe = message.sender === "me";
   const [showPicker, setShowPicker] = useState(false);
-  console.log("message", message);
-
+  const { mutate: toggleReaction } = useToggleReaction(chatId, currentUserId);
 
   const renderStatusIcon = () => {
-    let status = "sent";
-
-    if (message.readBy.length > 1) {
-      status = "read";
-    } else if (message.readBy.length === 1) {
-      status = "delivered";
+    if (message._id.startsWith("temp-")) {
+      return <Clock size={14} className="text-blue-200" />;
     }
 
-    console.log("status", status);
-    switch (status) {
-      case MessageStatus.SENT:
-        return <Check size={16} className="text-white" />;
-      case MessageStatus.DELIVERED:
-        return <CheckCheck size={16} className="text-white" />;
-      case MessageStatus.READ:
-        return <CheckCheck size={16} className="text-blue-950" />;
-      default:
-        return null;
+    /* Read: in 1:1 → readBy.length > 1; in groups → all recipients have read */
+    const recipientsRead = message.readBy.filter((id) => id !== message.sender._id).length;
+    const recipientCount = participantCount - 1;
+
+    if (recipientCount > 0 && recipientsRead >= recipientCount) {
+      return <CheckCheck size={16} className="text-white" />;
     }
+
+    /* Delivered: in groups, all recipients delivered; in 1:1, anyone delivered */
+    const recipientsDelivered = message.deliveredTo.filter(
+      (id) => id !== message.sender._id
+    ).length;
+
+    if (recipientCount > 0 && recipientsDelivered >= recipientCount) {
+      return <CheckCheck size={16} className="text-blue-200" />;
+    }
+    if (recipientsDelivered > 0) {
+      return <CheckCheck size={16} className="text-blue-200 opacity-70" />;
+    }
+
+    return <Check size={16} className="text-blue-200" />;
   };
 
   const handleSelectEmoji = (emoji: string) => {
-    onToggleReaction(emoji);
+    toggleReaction({ messageId: message._id, emoji });
     setShowPicker(false);
   };
+
+  const isTemp = message._id.startsWith("temp-");
 
   return (
     <div className={`flex items-start gap-3 ${isMe ? "flex-row-reverse" : ""}`}>
       {!isMe && (
         <div className="shrink-0">
-          <Avatar src={userAvatar} alt="user avatar" size="sm" />
+          <Avatar
+            src={message.sender.image}
+            alt={message.sender.name || "user"}
+            size="sm"
+          />
         </div>
       )}
       <div className="flex flex-col">
+        {showSenderName && (
+          <span className="text-xs font-semibold text-blue-500 dark:text-blue-300 ml-1 mb-1">
+            {message.sender.name || "Unknown"}
+          </span>
+        )}
+
         <div className="group relative">
           {showPicker && (
-            <EmojiPicker
+            <ReactionPicker
               onSelect={handleSelectEmoji}
               onClose={() => setShowPicker(false)}
               isMe={isMe}
@@ -136,65 +155,68 @@ const Message: React.FC<MessageProps> = ({
             </div>
           </div>
 
-          <div
-            className={`absolute top-1/2 -translate-y-1/2 ${
-              isMe
-                ? "left-0 -translate-x-full pr-1"
-                : "right-0 translate-x-full pl-1"
-            } opacity-0 group-hover:opacity-100 transition-opacity z-10`}
-          >
-            <button
-              onClick={() => setShowPicker((p) => !p)}
-              className="p-1.5 rounded-full bg-white dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-400 shadow-md"
-              aria-label="Add reaction"
-              aria-haspopup="true"
-              aria-expanded={showPicker}
+          {!isTemp && (
+            <div
+              className={`absolute top-1/2 -translate-y-1/2 ${
+                isMe
+                  ? "left-0 -translate-x-full pr-1"
+                  : "right-0 translate-x-full pl-1"
+              } opacity-0 group-hover:opacity-100 transition-opacity z-10`}
             >
-              <SmilePlus size={16} />
-            </button>
-          </div>
+              <button
+                onClick={() => setShowPicker((p) => !p)}
+                className="p-1.5 rounded-full bg-white dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-400 shadow-md"
+                aria-label="Add reaction"
+                aria-haspopup="true"
+                aria-expanded={showPicker}
+              >
+                <SmilePlus size={16} />
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* {message.reactions && message.reactions.length > 0 && (
+        {message.reactions && message.reactions.length > 0 && (
           <div
-            className={`flex gap-1 mt-1 z-10 relative ${
-              isMe ? "justify-end" : ""
-            } ${!isMe ? "pl-2" : "pr-2"}`}
+            className={`flex flex-wrap gap-1 mt-1 z-10 relative ${
+              isMe ? "justify-end pr-2" : "pl-2"
+            }`}
           >
             {message.reactions.map((reaction) => {
-              const hasReacted = reaction.users.includes("me");
+              const hasReacted = reaction.users.includes(currentUserId);
               return (
                 <button
                   key={reaction.emoji}
-                  onClick={() => onToggleReaction(reaction.emoji)}
+                  onClick={() =>
+                    toggleReaction({
+                      messageId: message._id,
+                      emoji: reaction.emoji,
+                    })
+                  }
                   className={`px-2 py-0.5 text-xs rounded-full border flex items-center gap-1 transition-colors ${
                     hasReacted
                       ? "bg-blue-100 dark:bg-blue-900/50 border-blue-300 dark:border-blue-700"
                       : "bg-slate-100 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 hover:bg-slate-200 dark:hover:bg-slate-600/50"
                   }`}
-                  aria-label={`You and ${
-                    reaction.users.length - 1
-                  } others reacted with ${reaction.emoji}`}
+                  aria-label={`React with ${reaction.emoji}`}
                 >
                   <span className="text-base leading-none">
                     {reaction.emoji}
                   </span>
-                  {reaction.users.length > 0 && (
-                    <span
-                      className={`font-semibold ${
-                        hasReacted
-                          ? "text-blue-600 dark:text-blue-300"
-                          : "text-slate-600 dark:text-slate-400"
-                      }`}
-                    >
-                      {reaction.users.length}
-                    </span>
-                  )}
+                  <span
+                    className={`font-semibold ${
+                      hasReacted
+                        ? "text-blue-600 dark:text-blue-300"
+                        : "text-slate-600 dark:text-slate-400"
+                    }`}
+                  >
+                    {reaction.users.length}
+                  </span>
                 </button>
               );
             })}
           </div>
-        )} */}
+        )}
       </div>
     </div>
   );

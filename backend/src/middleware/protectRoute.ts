@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { Types } from "mongoose";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../lib/auth.js";
+import { logger } from "../lib/logger.js";
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -25,7 +26,7 @@ export const protectRoute = async (
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // ✅ Convert string → ObjectId ONCE
+    /* Convert string → ObjectId once so handlers don't have to */
     req.user = {
       _id: new Types.ObjectId(session.user.id),
       email: session.user.email,
@@ -33,8 +34,8 @@ export const protectRoute = async (
     };
 
     next();
-  } catch (error) {
-    console.error("Auth middleware error:", error);
+  } catch (err) {
+    logger.warn({ err }, "auth middleware error");
     res.status(401).json({ message: "Unauthorized" });
   }
 };

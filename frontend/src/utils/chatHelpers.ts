@@ -6,14 +6,12 @@ export function getChatDisplayUser(chat: ChatType, currentUserId: string) {
       name: chat.name || "Group Chat",
       image: undefined,
       isOnline: false,
-      lastseen: undefined,
+      lastSeen: undefined,
     };
   }
 
-  // direct chat → show the OTHER user
+  /* direct chat → show the OTHER user */
   const otherUser = chat.participants.find((u) => u._id !== currentUserId);
-
-  console.log("Other user", otherUser);
 
   return {
     name: otherUser?.name ?? "Unknown",

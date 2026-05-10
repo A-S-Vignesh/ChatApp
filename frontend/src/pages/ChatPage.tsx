@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import ChatWindow from "../components/ChatWindow";
 import UserProfile from "../components/UserProfileModal";
@@ -8,26 +8,16 @@ import Help from "../components/Help";
 import LogoutConfirmationModal from "../components/LogoutConfirmationModal";
 import { useChats } from "../hooks/useChats";
 
-import type {
-  Chat,
-  Message,
-  User,
-  Theme,
-  NotificationSettings,
-  Reaction,
-} from "../../types";
-import { MessageStatus } from "../../types";
-import {
-  currentUser as me,
-  users as allUsers,
-} from "../../constants";
+import type { User, NotificationSettings } from "../../types";
 
 import AuthContainer from "./AuthContainer";
 import { authClient } from "../lib/authClient";
 import { socket } from "../lib/socket";
-import { useQueryClient } from "@tanstack/react-query";
-import { MessagesResponse } from "../types/message";
+import { useQueryClient, InfiniteData } from "@tanstack/react-query";
+import { MessagesResponse, MessageType, ReactionType } from "../types/message";
+import { ChatType } from "../types/chat";
 import AddNewChatModal from "../components/AddNewChatModal";
+import GroupInfoModal from "../components/GroupInfoModal";
 const { useSession } = authClient;
 
 const ChatPage: React.FC = () => {
@@ -45,11 +35,11 @@ const ChatPage: React.FC = () => {
   const [showMyProfile, setShowMyProfile] = useState<boolean>(false);
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [showHelp, setShowHelp] = useState<boolean>(false);
+  const [showGroupInfo, setShowGroupInfo] = useState<boolean>(false);
   const queryClient = useQueryClient();
   const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
   const [showAddNewChatModal, setShowAddNewChatModal] =
     useState<boolean>(false);
-  const [currentUser, setCurrentUser] = useState<User>(me);
 
   // Settings State
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -84,27 +74,39 @@ const ChatPage: React.FC = () => {
     }, [session?.user]);
   
   useEffect(() => {
-    const handler = ({ message, chatId: incomingChatId }: any) => {
+    const handler = ({
+      message,
+      chatId: incomingChatId,
+    }: {
+      message: MessageType;
+      chatId: string;
+    }) => {
       // ❌ Ignore my own socket echo
       if (message.sender._id === session.user.id) return;
 
-      /* 1️⃣ Update messages cache (if opened later) */
-      queryClient.setQueryData(
+      /* 1️⃣ Append to the newest page of the messages cache */
+      queryClient.setQueryData<InfiniteData<MessagesResponse>>(
         ["messages", incomingChatId],
-        (old: MessagesResponse | undefined) => {
-          if (!old) {
-            return { messages: [message], nextCursor: null };
+        (old) => {
+          if (!old || old.pages.length === 0) {
+            return {
+              pages: [{ messages: [message], nextCursor: null }],
+              pageParams: [undefined],
+            };
           }
-
+          const [first, ...rest] = old.pages;
           return {
             ...old,
-            messages: [...old.messages, message],
+            pages: [
+              { ...first, messages: [...first.messages, message] },
+              ...rest,
+            ],
           };
         }
       );
 
       /* 2️⃣ Update sidebar preview + move chat to top */
-      queryClient.setQueryData(["chats"], (old: any[] = []) => {
+      queryClient.setQueryData<ChatType[]>(["chats"], (old = []) => {
         const updated = old.map((chat) =>
           chat._id === incomingChatId
             ? {
@@ -117,6 +119,10 @@ const ChatPage: React.FC = () => {
                   sender: message.sender,
                 },
                 updatedAt: message.createdAt,
+                unreadCount:
+                  activeChatId === incomingChatId
+                    ? 0
+                    : (chat.unreadCount ?? 0) + 1,
               }
             : chat
         );
@@ -133,7 +139,7 @@ const ChatPage: React.FC = () => {
     return () => {
       socket.off("message:new", handler);
     };
-  }, [queryClient, session?.user?.id]);
+  }, [queryClient, session?.user?.id, activeChatId]);
   
   useEffect(() => {
     const onlineHandler = ({ userId }: any) => {
@@ -168,20 +174,30 @@ const ChatPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const handler = ({ chatId, readerId }: any) => {
-      queryClient.setQueryData(["messages", chatId], (old: any) => {
-        if (!old) return old;
-
-        return {
-          ...old,
-          messages: old.messages.map((msg: any) => ({
-            ...msg,
-            readBy: msg.readBy.includes(readerId)
-              ? msg.readBy
-              : [...msg.readBy, readerId],
-          })),
-        };
-      });
+    const handler = ({
+      chatId,
+      readerId,
+    }: {
+      chatId: string;
+      readerId: string;
+    }) => {
+      queryClient.setQueryData<InfiniteData<MessagesResponse>>(
+        ["messages", chatId],
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              messages: page.messages.map((msg) =>
+                msg.readBy.includes(readerId)
+                  ? msg
+                  : { ...msg, readBy: [...msg.readBy, readerId] }
+              ),
+            })),
+          };
+        }
+      );
     };
 
     socket.on("messages:read", handler);
@@ -189,9 +205,145 @@ const ChatPage: React.FC = () => {
     return () => {
       socket.off("messages:read", handler);
     };
-  }, []);
+  }, [queryClient]);
 
+  /* 📨 DELIVERY RECEIPTS — when a recipient comes online or receives a message,
+     server emits this so the sender's tick goes from ✓ to ✓✓. */
+  useEffect(() => {
+    const handler = ({
+      messageIds,
+      userId,
+    }: {
+      messageIds: string[];
+      userId: string;
+    }) => {
+      const ids = new Set(messageIds);
+      queryClient.setQueriesData<InfiniteData<MessagesResponse>>(
+        { queryKey: ["messages"] },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              messages: page.messages.map((msg) =>
+                ids.has(msg._id)
+                  ? {
+                      ...msg,
+                      deliveredTo: msg.deliveredTo.includes(userId)
+                        ? msg.deliveredTo
+                        : [...msg.deliveredTo, userId],
+                    }
+                  : msg
+              ),
+            })),
+          };
+        }
+      );
+    };
 
+    socket.on("messages:delivered", handler);
+
+    return () => {
+      socket.off("messages:delivered", handler);
+    };
+  }, [queryClient]);
+
+  /* 👥 CHAT LIFECYCLE — created/updated/removed (groups, member changes) */
+  useEffect(() => {
+    const onCreated = (chat: ChatType) => {
+      queryClient.setQueryData<ChatType[]>(["chats"], (old = []) => {
+        if (old.some((c) => c._id === chat._id)) return old;
+        return [chat, ...old];
+      });
+    };
+    const onUpdated = (chat: ChatType) => {
+      queryClient.setQueryData<ChatType[]>(["chats"], (old = []) =>
+        old.map((c) => (c._id === chat._id ? { ...c, ...chat } : c))
+      );
+    };
+    const onRemoved = ({ chatId }: { chatId: string }) => {
+      queryClient.setQueryData<ChatType[]>(["chats"], (old = []) =>
+        old.filter((c) => c._id !== chatId)
+      );
+      queryClient.removeQueries({ queryKey: ["messages", chatId] });
+      setActiveChatId((prev) => (prev === chatId ? null : prev));
+      setShowGroupInfo(false);
+    };
+
+    socket.on("chat:created", onCreated);
+    socket.on("chat:updated", onUpdated);
+    socket.on("chat:removed", onRemoved);
+
+    return () => {
+      socket.off("chat:created", onCreated);
+      socket.off("chat:updated", onUpdated);
+      socket.off("chat:removed", onRemoved);
+    };
+  }, [queryClient]);
+
+  /* 😀 REACTIONS — sender of the reaction is anyone in the chat; everyone gets the update. */
+  useEffect(() => {
+    const handler = ({
+      chatId,
+      messageId,
+      reactions,
+    }: {
+      chatId: string;
+      messageId: string;
+      reactions: ReactionType[];
+    }) => {
+      queryClient.setQueryData<InfiniteData<MessagesResponse>>(
+        ["messages", chatId],
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              messages: page.messages.map((msg) =>
+                msg._id === messageId ? { ...msg, reactions } : msg
+              ),
+            })),
+          };
+        }
+      );
+    };
+
+    socket.on("message:reaction", handler);
+
+    return () => {
+      socket.off("message:reaction", handler);
+    };
+  }, [queryClient]);
+
+  /* 🔌 CONNECTION STATE — show "Reconnecting…" banner while socket is down,
+     and refresh missed messages/chats once we're back. */
+  const [showReconnectBanner, setShowReconnectBanner] = useState(false);
+  const wasDisconnectedRef = useRef(false);
+
+  useEffect(() => {
+    const onConnect = () => {
+      setShowReconnectBanner(false);
+      if (wasDisconnectedRef.current) {
+        queryClient.invalidateQueries({ queryKey: ["chats"] });
+        queryClient.invalidateQueries({ queryKey: ["messages"] });
+        wasDisconnectedRef.current = false;
+      }
+    };
+    const onDisconnect = () => {
+      wasDisconnectedRef.current = true;
+      setShowReconnectBanner(true);
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+    };
+  }, [queryClient]);
 
 
   const activeChat = chats.find((chat) => chat._id === activeChatId);
@@ -203,77 +355,19 @@ const ChatPage: React.FC = () => {
     setShowMyProfile(false);
     setShowSettings(false);
     setShowHelp(false);
+    setShowGroupInfo(false);
   };
 
-  const handleSendMessage = (messageText: string) => {
-    if (!activeChatId) return;
-
-    const newMessage: Message = {
-      id: `msg${Date.now()}`,
-      text: messageText,
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      sender: "me",
-      status: MessageStatus.SENT,
-    };
-
-    // setChats((prevChats) =>
-    //   prevChats.map((chat) =>
-    //     chat.id === activeChatId
-    //       ? { ...chat, messages: [...chat.messages, newMessage] }
-    //       : chat
-    //   )
-    // );
+  const handleShowGroupInfo = () => {
+    setProfileUser(null);
+    setShowMyProfile(false);
+    setShowSettings(false);
+    setShowHelp(false);
+    setShowGroupInfo(true);
   };
 
-
-
-  const handleToggleReaction = (
-    chatId: string,
-    messageId: string,
-    emoji: string
-  ) => {
-    // setChats((prevChats) => {
-    //   const newChats = JSON.parse(JSON.stringify(prevChats));
-    //   const chat = newChats.find((c: Chat) => c.id === chatId);
-    //   if (!chat) return prevChats;
-
-    //   const message = chat.messages.find((m: Message) => m.id === messageId);
-    //   if (!message) return prevChats;
-
-    //   if (!message.reactions) {
-    //     message.reactions = [];
-    //   }
-
-    //   const userReaction = message.reactions.find((r: Reaction) =>
-    //     r.users.includes(currentUser.id)
-    //   );
-
-    //   if (userReaction) {
-    //     userReaction.users = userReaction.users.filter(
-    //       (id: string) => id !== currentUser.id
-    //     );
-    //   }
-
-    //   if (!userReaction || userReaction.emoji !== emoji) {
-    //     const targetReaction = message.reactions.find(
-    //       (r: Reaction) => r.emoji === emoji
-    //     );
-    //     if (targetReaction) {
-    //       targetReaction.users.push(currentUser.id);
-    //     } else {
-    //       message.reactions.push({ emoji, users: [currentUser.id] });
-    //     }
-    //   }
-
-    //   message.reactions = message.reactions.filter(
-    //     (r: Reaction) => r.users.length > 0
-    //   );
-
-    //   return newChats;
-    // });
+  const handleCloseGroupInfo = () => {
+    setShowGroupInfo(false);
   };
 
   const handleViewProfile = (user: User) => {
@@ -299,10 +393,6 @@ const ChatPage: React.FC = () => {
 
   const handleCloseMyProfile = () => {
     setShowMyProfile(false);
-  };
-
-  const handleUpdateProfile = (updatedUser: User) => {
-    setCurrentUser(updatedUser);
   };
 
   const handleShowSettings = () => {
@@ -365,25 +455,6 @@ const ChatPage: React.FC = () => {
     setShowAddNewChatModal(false);
   };
 
-  const handleCreateNewChat = (user: User) => {
-    // const chatExists = chats.some((chat) => chat.user.id === user.id);
-    // if (chatExists) {
-    //   // const existingChat = chats.find((chat) => chat.user.id === user.id);
-    //   // if (existingChat) {
-    //   //   setActiveChatId(existingChat.id);
-    //   // }
-    // } else {
-    //   const newChat: Chat = {
-    //     id: `chat${Date.now()}`,
-    //     user: user,
-    //     messages: [],
-    //   };
-    //   // setChats((prevChats) => [newChat, ...prevChats]);
-    //   setActiveChatId(newChat.id);
-    // }
-    handleCloseAddNewChatModal();
-  };
-
   if (loading) {
     return (
       <div className="h-screen w-screen flex items-center justify-center">
@@ -391,16 +462,20 @@ const ChatPage: React.FC = () => {
       </div>
     );
   }
-  console.log("session:", session);
   if (!session?.user) {
     return <AuthContainer />;
   }
 
   const anySidePanelOpen =
-    showProfile || showMyProfile || showSettings || showHelp;
+    showProfile || showMyProfile || showSettings || showHelp || showGroupInfo;
 
   return (
     <div className="h-screen w-screen bg-slate-200 dark:bg-slate-950 flex items-center justify-center p-0">
+      {showReconnectBanner && (
+        <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-white text-center py-2 z-50 text-sm font-medium shadow-md">
+          Reconnecting…
+        </div>
+      )}
       <div
         className={`h-full w-full md:max-w-450 flex antialiased text-slate-800 bg-slate-100 dark:bg-slate-900 dark:text-slate-200 overflow-hidden shadow-xl md:rounded-2xl`}
       >
@@ -438,11 +513,16 @@ const ChatPage: React.FC = () => {
             <ChatWindow
               chatId={activeChatId}
               chat={activeChat}
-              currentUserId={session.user.id}
-              onSendMessage={handleSendMessage}
+              currentUser={{
+                id: session.user.id,
+                name: session.user.name,
+                image: session.user.image ?? undefined,
+              }}
               onBack={handleBackToChatList}
               onViewProfile={handleViewProfile}
-              onToggleReaction={handleToggleReaction}
+              onShowGroupInfo={
+                activeChat?.isGroup ? handleShowGroupInfo : undefined
+              }
             />
           </div>
 
@@ -465,13 +545,7 @@ const ChatPage: React.FC = () => {
             flex-col h-full w-full lg:w-95 shrink-0 lg:border-l lg:border-slate-200 dark:lg:border-slate-700
           `}
           >
-            {currentUser && (
-              <MyProfile
-                user={session.user}
-                onClose={handleCloseMyProfile}
-                onUpdateProfile={handleUpdateProfile}
-              />
-            )}
+            <MyProfile onClose={handleCloseMyProfile} />
           </div>
 
           {/* Settings */}
@@ -499,6 +573,22 @@ const ChatPage: React.FC = () => {
           >
             <Help onClose={handleCloseHelp} />
           </div>
+
+          {/* Group Info */}
+          <div
+            className={`
+            ${showGroupInfo ? "flex" : "hidden"}
+            flex-col h-full w-full lg:w-95 shrink-0 lg:border-l lg:border-slate-200 dark:lg:border-slate-700
+          `}
+          >
+            {activeChat?.isGroup && (
+              <GroupInfoModal
+                chat={activeChat}
+                currentUserId={session.user.id}
+                onClose={handleCloseGroupInfo}
+              />
+            )}
+          </div>
         </div>
         <LogoutConfirmationModal
           isOpen={showLogoutModal}
@@ -509,7 +599,6 @@ const ChatPage: React.FC = () => {
           isOpen={showAddNewChatModal}
           onClose={handleCloseAddNewChatModal}
           setShowModel={setShowAddNewChatModal}
-          onCreateChat={handleCreateNewChat}
           setActiveChatId={setActiveChatId}
         />
       </div>

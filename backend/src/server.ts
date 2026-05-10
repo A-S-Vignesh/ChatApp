@@ -1,47 +1,63 @@
-import dotenv from "dotenv";
-dotenv.config();
-
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import http from "http";
+import { pinoHttp } from "pino-http";
+import type { Request, Response } from "express";
 import { toNodeHandler } from "better-auth/node";
+
 import { auth } from "./lib/auth.js";
 import { connectDB } from "./lib/db.js";
+import { env } from "./lib/env.js";
+import { logger } from "./lib/logger.js";
 import router from "./routes/index.js";
-import http from "http";
 import { initSocket } from "./socket.js";
 
 const app = express();
-const port = 5000;
 
-// CORS (before auth)
+/* Trust the first proxy hop (so req.ip reflects X-Forwarded-For when deployed
+   behind a load balancer / reverse proxy). Required for express-rate-limit. */
+app.set("trust proxy", 1);
+
+/* Request logging */
+app.use(
+  pinoHttp({
+    logger,
+    /* Lower the log level for healthy noise like preflight + the root probe */
+    customLogLevel: (_req: Request, res: Response, err?: Error) => {
+      if (err || res.statusCode >= 500) return "error";
+      if (res.statusCode >= 400) return "warn";
+      return "debug";
+    },
+  })
+);
+
+/* Security headers */
+app.use(helmet());
+
+/* CORS — accepts a comma-separated list via CORS_ORIGIN */
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: env.CORS_ORIGIN,
     credentials: true,
   })
 );
 
-// DB connection
 connectDB();
 
-// 🔥 Create HTTP server ONCE
 const server = http.createServer(app);
-
-// 🔥 Attach socket to SAME server
 export const io = initSocket(server);
 
-// 🔑 Better Auth handler (must be before JSON)
+/* Better Auth handler must come BEFORE express.json() — it streams its own body */
 app.all("/api/auth/*splat", toNodeHandler(auth));
 
-// JSON middleware AFTER auth
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
 app.use("/api", router);
 
 app.get("/", (_, res) => {
-  res.send("Chat API running 🚀");
+  res.send("Chat API running");
 });
 
-// ✅ START THE HTTP SERVER (NOT app.listen)
-server.listen(port, () => {
-  console.log(`🚀 Server + Socket running on port ${port}`);
+server.listen(env.PORT, () => {
+  logger.info({ port: env.PORT, env: env.NODE_ENV }, "server started");
 });

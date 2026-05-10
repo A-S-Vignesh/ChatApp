@@ -1,19 +1,54 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Smile, Paperclip, Mic, Send } from "lucide-react";
-import EmojiPicker, { EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
+import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
+import { socket } from "../lib/socket";
 
 
 interface ChatInputProps {
+  chatId: string | null;
   onSendMessage: (messageText: string) => void;
   disabled?: boolean;
 }
 
+const TYPING_STOP_DELAY_MS = 2000;
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
+const ChatInput: React.FC<ChatInputProps> = ({ chatId, onSendMessage, disabled }) => {
   const [inputText, setInputText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const emojiRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  /* typing emit state */
+  const isTypingRef = useRef(false);
+  const typingTimeoutRef = useRef<number | null>(null);
+
+  const emitTypingStop = () => {
+    if (typingTimeoutRef.current !== null) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    if (isTypingRef.current && chatId) {
+      socket.emit("typing:stop", { chatId });
+    }
+    isTypingRef.current = false;
+  };
+
+  const emitTypingStart = () => {
+    if (!chatId) return;
+    if (!isTypingRef.current) {
+      socket.emit("typing:start", { chatId });
+      isTypingRef.current = true;
+    }
+    if (typingTimeoutRef.current !== null) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    typingTimeoutRef.current = window.setTimeout(emitTypingStop, TYPING_STOP_DELAY_MS);
+  };
+
+  /* clean up on chat switch / unmount */
+  useEffect(() => {
+    return () => emitTypingStop();
+  }, [chatId]);
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -54,10 +89,11 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    console.log("inputText", inputText);
+    if (disabled) return;
 
     const trimmedText = inputText.trim();
     if (trimmedText) {
+      emitTypingStop();
       onSendMessage(trimmedText);
       setInputText("");
     }
@@ -139,10 +175,19 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
         <textarea
           ref={textareaRef}
           value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            setInputText(val);
+            if (val.trim().length > 0) {
+              emitTypingStart();
+            } else {
+              emitTypingStop();
+            }
+          }}
           onKeyDown={handleKeyDown}
           placeholder="Type a message..."
           rows={1}
+          disabled={disabled}
           className="
             grow w-full px-4 py-2 rounded-xl
             bg-slate-100 dark:bg-slate-700
@@ -152,6 +197,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage }) => {
             overflow-y-hidden
             focus:outline-none focus:ring-2 focus:ring-blue-500
             transition-height duration-150
+            disabled:opacity-60
   "
           style={{ maxHeight: "120px" }}
         />

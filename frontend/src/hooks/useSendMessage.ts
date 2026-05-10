@@ -1,82 +1,92 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, InfiniteData } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import { toastError } from "../lib/toast";
 import { MessagesResponse, MessageType } from "../types/message";
 
-export function useSendMessage(chatId: string, currentUserId: string) {
+type CurrentUser = {
+  id: string;
+  name?: string;
+  image?: string;
+};
+
+export function useSendMessage(chatId: string, currentUser: CurrentUser) {
   const queryClient = useQueryClient();
+  const queryKey = ["messages", chatId];
 
   return useMutation({
     mutationFn: async (content: string) => {
-      const res = await api.post("/messages", {
-        chatId,
-        content,
-      });
+      const res = await api.post("/messages", { chatId, content });
       return res.data as MessageType;
     },
 
-    /* 🚀 Optimistic update */
+    /* 🚀 Optimistic update — append to the newest page */
     onMutate: async (content) => {
-      await queryClient.cancelQueries({ queryKey: ["messages", chatId] });
+      await queryClient.cancelQueries({ queryKey });
 
-      const previousMessages =
-        queryClient.getQueryData<MessageType[]>(["messages", chatId]) ?? [];
+      const previous =
+        queryClient.getQueryData<InfiniteData<MessagesResponse>>(queryKey);
 
       const optimisticMessage: MessageType = {
         _id: `temp-${Date.now()}`,
         chatId,
         type: "text",
         content,
-        sender: currentUserId,
-        readBy: [],
+        sender: {
+          _id: currentUser.id,
+          name: currentUser.name ?? "",
+          image: currentUser.image,
+        },
+        readBy: [currentUser.id],
+        deliveredTo: [],
+        reactions: [],
         createdAt: new Date().toISOString(),
       };
 
-      queryClient.setQueryData(
-        ["messages", chatId],
-        (old: MessagesResponse | undefined) => {
-          if (!old) {
-            return { messages: [optimisticMessage], nextCursor: null };
-          }
-
+      queryClient.setQueryData<InfiniteData<MessagesResponse>>(queryKey, (old) => {
+        if (!old || old.pages.length === 0) {
           return {
-            ...old,
-            messages: [...old.messages, optimisticMessage],
+            pages: [{ messages: [optimisticMessage], nextCursor: null }],
+            pageParams: [undefined],
           };
         }
-      );
+        const [first, ...rest] = old.pages;
+        return {
+          ...old,
+          pages: [
+            { ...first, messages: [...first.messages, optimisticMessage] },
+            ...rest,
+          ],
+        };
+      });
 
-
-      return { previousMessages };
+      return { previous, optimisticId: optimisticMessage._id };
     },
 
-    /* ❌ Rollback if error */
-    onError: (_err, _content, context) => {
-      if (context?.previousMessages) {
-        queryClient.setQueryData(
-          ["messages", chatId],
-          context.previousMessages
-        );
+    /* ❌ Rollback on error */
+    onError: (err, _content, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous);
       }
+      toastError(err, "Failed to send message");
     },
 
-    /* ✅ Replace temp message with real one */
-    onSuccess: (newMessage) => {
-      queryClient.setQueryData(
-        ["messages", chatId],
-        (old: MessagesResponse | undefined) => {
-          if (!old) return old;
-
-          return {
-            ...old,
-            messages: old.messages.map((msg) =>
-              msg._id.startsWith("temp-") ? newMessage : msg
+    /* ✅ Replace temp message with the real one */
+    onSuccess: (real, _content, context) => {
+      const tempId = context?.optimisticId;
+      queryClient.setQueryData<InfiniteData<MessagesResponse>>(queryKey, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            messages: page.messages.map((m) =>
+              m._id === tempId ? real : m
             ),
-          };
-        }
-      );
+          })),
+        };
+      });
 
-
-      // Update chat list preview
+      // refresh sidebar preview
       queryClient.invalidateQueries({ queryKey: ["chats"] });
     },
   });
