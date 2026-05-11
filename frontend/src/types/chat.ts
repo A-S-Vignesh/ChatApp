@@ -34,7 +34,14 @@ export type ChatType = {
 export type ChatUser = {
   _id: string;
   name: string;
+  email?: string;
+  emailVerified?: boolean;
   image?: string;
   isOnline?: boolean;
-  lastSeen?: string;
+  lastSeen?: string | null;
+  about?: string;
+  phone?: string;
+  location?: string;
+  dob?: string | null;
+  createdAt?: string;
 };

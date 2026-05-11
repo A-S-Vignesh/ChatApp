@@ -1,26 +1,33 @@
-import { ChatType } from "../types/chat";
+import { ChatType, ChatUser } from "../types/chat";
 
-export function getChatDisplayUser(chat: ChatType, currentUserId: string) {
+/* Returns the "display user" for a chat — the other participant in a 1:1 chat,
+   or a synthetic placeholder for a group. We pass through every public profile
+   field so views like UserProfileModal can show bio/email/phone/etc. without a
+   second fetch. */
+export function getChatDisplayUser(
+  chat: ChatType,
+  currentUserId: string
+): ChatUser {
   if (chat.isGroup) {
     return {
       _id: "",
       name: chat.name || "Group Chat",
       image: undefined,
       isOnline: false,
-      lastseen: undefined,
+      lastSeen: null,
     };
   }
 
-  // direct chat → show the OTHER user
   const otherUser = chat.participants.find((u) => u._id !== currentUserId);
-  // console.log("otherUser", otherUser);
+  if (!otherUser) {
+    return { _id: "", name: "Unknown" };
+  }
 
   return {
-    _id: otherUser?._id ?? "",
-    name: otherUser?.name ?? "Unknown",
-    image: otherUser?.image,
-    isOnline: otherUser?.isOnline,
-    lastSeen: otherUser?.isOnline ? undefined : otherUser?.lastSeen,
+    ...otherUser,
+    /* lastSeen is meaningless while they're online — null it out so the UI
+       shows "Online" instead of a stale timestamp. */
+    lastSeen: otherUser.isOnline ? null : otherUser.lastSeen ?? null,
   };
 }
 

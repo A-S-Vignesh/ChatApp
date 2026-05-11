@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from "../middleware/protectRoute.js";
 import User from "../models/User.js";
 import Message from "../models/Message.js";
 import { io } from "../server.js";
+import { getUserPrivacy } from "../socket.js";
 
 const router = Router();
 
@@ -184,12 +185,35 @@ router.get("/", async (req: AuthenticatedRequest, res) => {
         },
       },
 
-      // 7. Populate participants
+      // 7. Populate participants — explicit projection so we expose only
+      //    publicly-safe fields (name, email, image, presence, profile bits)
+      //    and never leak notificationSettings, privacy, or auth-internal data.
       {
         $lookup: {
           from: "users",
-          localField: "participants",
-          foreignField: "_id",
+          let: { ids: "$participants" },
+          pipeline: [
+            { $match: { $expr: { $in: ["$_id", "$$ids"] } } },
+            {
+              $project: {
+                _id: 1,
+                name: 1,
+                email: 1,
+                emailVerified: 1,
+                image: 1,
+                isOnline: 1,
+                lastSeen: 1,
+                about: 1,
+                phone: 1,
+                location: 1,
+                dob: 1,
+                createdAt: 1,
+                /* Keep `privacy` only so the route's post-processing can
+                   apply the mutual rule. It gets stripped below. */
+                privacy: 1,
+              },
+            },
+          ],
           as: "participants",
         },
       },
@@ -207,6 +231,40 @@ router.get("/", async (req: AuthenticatedRequest, res) => {
         },
       },
     ]);
+
+    /* Apply the mutual privacy rule to each participant's online/lastSeen:
+       - If a participant hid their own showOnline → force isOnline=false.
+       - If a participant hid their own lastSeen → force lastSeen=null.
+       - If the REQUESTER hid showOnline → they see everyone as offline.
+       - If the REQUESTER hid lastSeen → they see no lastSeen at all.
+       This makes turning a toggle off symmetrically lose visibility. */
+    const requesterPrivacy = await getUserPrivacy(userId.toString());
+    const requesterShowOnlineOff = !requesterPrivacy.showOnline;
+    const requesterLastSeenOff = requesterPrivacy.lastSeen !== "everyone";
+
+    for (const chat of chats) {
+      if (!chat.participants) continue;
+      for (const p of chat.participants) {
+        if (!p) continue;
+        const isSelf = p._id?.toString() === userId.toString();
+
+        if (!isSelf) {
+          const pp = p.privacy ?? {};
+          const subjectShowOnlineOff = pp.showOnline === false;
+          const subjectLastSeenOff = pp.lastSeen === "nobody";
+
+          if (subjectShowOnlineOff || requesterShowOnlineOff) {
+            p.isOnline = false;
+          }
+          if (subjectLastSeenOff || requesterLastSeenOff) {
+            p.lastSeen = null;
+          }
+        }
+
+        /* Never expose other users' privacy preferences to the client. */
+        delete p.privacy;
+      }
+    }
 
     res.json(chats);
   } catch (err) {
@@ -339,6 +397,11 @@ router.get("/:chatId/read", async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ message: "Invalid chatId" });
     }
 
+    /* Always update readBy locally so the user's own unread-badge math stays
+       correct — but if they've turned off read receipts, skip the socket
+       emit so senders don't learn that they read. The mutual rule's reverse
+       direction (this user not seeing OTHERS' read state) is enforced in the
+       GET /messages handler by filtering readBy on response. */
     const result = await Message.updateMany(
       {
         chatId,
@@ -348,10 +411,13 @@ router.get("/:chatId/read", async (req: AuthenticatedRequest, res) => {
       { $addToSet: { readBy: userId } }
     );
 
-    io.to(chatId).emit("messages:read", {
-      chatId,
-      readerId: userId,
-    });
+    const privacy = await getUserPrivacy(userId.toString());
+    if (privacy.readReceipts) {
+      io.to(chatId).emit("messages:read", {
+        chatId,
+        readerId: userId,
+      });
+    }
 
     res.json({ updated: result.modifiedCount });
   } catch (error) {

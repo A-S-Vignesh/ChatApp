@@ -527,9 +527,6 @@ const ChatPage: React.FC = () => {
     setShowMyProfile(false);
   };
 
-  const handleUpdateProfile = (updatedUser: User) => {
-    setCurrentUser(updatedUser);
-  };
 
   const handleShowSettings = () => {
     setProfileUser(null);
@@ -761,13 +758,10 @@ const ChatPage: React.FC = () => {
             flex-col h-full w-full lg:w-95 shrink-0 lg:border-l lg:border-slate-200 dark:lg:border-slate-700
           `}
           >
-            {currentUser && (
-              <MyProfile
-                user={session.user}
-                onClose={handleCloseMyProfile}
-                onUpdateProfile={handleUpdateProfile}
-              />
-            )}
+            <MyProfile
+              user={session.user as any}
+              onClose={handleCloseMyProfile}
+            />
           </div>
 
           {/* Settings */}
@@ -783,6 +777,7 @@ const ChatPage: React.FC = () => {
               onThemeChange={setTheme}
               notificationSettings={notifications}
               onNotificationChange={setNotifications}
+              onLogout={handleOpenLogoutModal}
             />
           </div>
 

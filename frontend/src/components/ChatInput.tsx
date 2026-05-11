@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from "react";
 import { Smile, Paperclip, Mic, Send } from "lucide-react";
 import EmojiPicker, { EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
 import { socket } from "../lib/socket";
+import { useProfile } from "../hooks/useProfile";
+import { useLocalPrefs } from "../hooks/useLocalPrefs";
 
 interface ChatInputProps {
   onSendMessage: (messageText: string) => void;
@@ -18,6 +20,15 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, chatId }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
+
+  /* Honor the user's typing-indicator privacy: if they've turned it off, we
+     never emit typing events. The server enforces this too (defense in depth),
+     but suppressing on the client saves a round-trip on every keystroke. */
+  const { data: profile } = useProfile();
+  const typingEnabled = profile?.privacy?.typingIndicator !== false;
+
+  /* Send-on-Enter preference (device-local). */
+  const { prefs } = useLocalPrefs();
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -58,20 +69,22 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, chatId }) => {
   useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      if (isTypingRef.current) {
+      if (isTypingRef.current && typingEnabled) {
         socket.emit("typing:stop", { chatId });
         isTypingRef.current = false;
       }
     };
-  }, [chatId]);
+  }, [chatId, typingEnabled]);
 
   const emitTypingStop = () => {
-    socket.emit("typing:stop", { chatId });
+    if (typingEnabled) socket.emit("typing:stop", { chatId });
     isTypingRef.current = false;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputText(e.target.value);
+
+    if (!typingEnabled) return;
 
     if (!isTypingRef.current) {
       socket.emit("typing:start", { chatId });
@@ -118,7 +131,14 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, chatId }) => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key !== "Enter") return;
+    if (e.shiftKey) return; // Shift+Enter always inserts a newline
+
+    if (prefs.sendOnEnter) {
+      e.preventDefault();
+      handleSubmit();
+    } else if (e.ctrlKey || e.metaKey) {
+      /* Slack-style: Ctrl/Cmd+Enter sends; plain Enter inserts a newline. */
       e.preventDefault();
       handleSubmit();
     }
@@ -144,12 +164,12 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, chatId }) => {
         >
           <Smile size={22} />
         </button>
-        <button
+        {/* <button
           type="button"
           className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 mb-1"
         >
           <Paperclip size={22} />
-        </button>
+        </button> */}
         {showEmoji && (
           <div ref={emojiRef} className="absolute bottom-16 left-4 z-50">
             <EmojiPicker
@@ -187,10 +207,14 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, chatId }) => {
         {/* Send/Mic button */}
         <button
           type="submit"
+          disabled={!inputText.trim()}
           className="p-3 rounded-full bg-blue-500 text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform duration-150 transform active:scale-95"
-          aria-label={inputText.trim() ? "Send message" : "Record voice message"}
+          aria-label={
+            inputText.trim() ? "Send message" : "Record voice message"
+          }
         >
-          {inputText.trim() ? <Send size={20} /> : <Mic size={20} />}
+          {inputText.trim() ? <Send size={20} /> : <Send size={20} />}
+          {/* <Mic size={20} /> */}
         </button>
       </form>
     </div>

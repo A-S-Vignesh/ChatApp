@@ -10,6 +10,8 @@ export interface UserType {
   location?: string;
   lastSeen?: string;
   about?: string;
+  /* ISO date string (YYYY-MM-DD or full ISO). */
+  dob?: string | null;
   createdAt: string;
   updatedAt: string;
 }

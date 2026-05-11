@@ -28,6 +28,59 @@ export function isUserFocusedOn(userId: string, chatId: string): boolean {
   return false;
 }
 
+/* ── Privacy cache ──────────────────────────────────────────────────────
+   Privacy preferences gate high-frequency events (typing, online/offline),
+   so we cache them in memory instead of hitting the DB per event. Populated
+   on connect; updated in real time by `setUserPrivacyCache` from the route
+   handler when a user changes their settings.
+
+   The toggles are MUTUAL: turning a flag off both stops you from emitting
+   that signal AND stops you from receiving it from others. That's enforced
+   in the helpers below. */
+export type UserPrivacy = {
+  readReceipts: boolean;
+  typingIndicator: boolean;
+  lastSeen: "everyone" | "nobody";
+  showOnline: boolean;
+};
+
+const DEFAULT_PRIVACY: UserPrivacy = {
+  readReceipts: true,
+  typingIndicator: true,
+  lastSeen: "everyone",
+  showOnline: true,
+};
+
+const userPrivacy = new Map<string, UserPrivacy>();
+
+function normalizePrivacy(raw: any): UserPrivacy {
+  return {
+    readReceipts: raw?.readReceipts !== false,
+    typingIndicator: raw?.typingIndicator !== false,
+    lastSeen: raw?.lastSeen === "nobody" ? "nobody" : "everyone",
+    showOnline: raw?.showOnline !== false,
+  };
+}
+
+export function getCachedUserPrivacy(userId: string): UserPrivacy {
+  return userPrivacy.get(userId) ?? DEFAULT_PRIVACY;
+}
+
+export function setUserPrivacyCache(userId: string, raw: any): void {
+  userPrivacy.set(userId, normalizePrivacy(raw));
+}
+
+/* Async fetcher for routes — uses cache when available, falls back to DB.
+   Returns DEFAULT_PRIVACY if the user has no settings yet. */
+export async function getUserPrivacy(userId: string): Promise<UserPrivacy> {
+  const cached = userPrivacy.get(userId);
+  if (cached) return cached;
+  const u = await User.findById(userId).select("privacy").lean<{ privacy?: any }>();
+  const normalized = normalizePrivacy(u?.privacy);
+  userPrivacy.set(userId, normalized);
+  return normalized;
+}
+
 export function initSocket(server: http.Server) {
   const io = new Server(server, {
     cors: {
@@ -52,6 +105,19 @@ export function initSocket(server: http.Server) {
     }
   });
 
+  /* Iterate every connected socket and run `fn` for each one (except the
+     caller's). Used for selective broadcasts that need per-recipient privacy
+     checks. */
+  function forEachOtherSocket(
+    selfSocketId: string,
+    fn: (sid: string, presence: SocketPresence) => void
+  ) {
+    for (const [sid, presence] of socketPresence.entries()) {
+      if (sid === selfSocketId) continue;
+      fn(sid, presence);
+    }
+  }
+
   io.on("connection", async (socket) => {
     const userId = socket.data.userId as string;
 
@@ -70,9 +136,25 @@ export function initSocket(server: http.Server) {
        (e.g. older client). */
     socketPresence.set(socket.id, { userId, activeChatId: null, visible: true });
 
+    /* Load privacy into the cache for this user (cheap: only on first socket). */
+    if (!userPrivacy.has(userId)) {
+      const u = await User.findById(userId).select("privacy").lean<{ privacy?: any }>();
+      userPrivacy.set(userId, normalizePrivacy(u?.privacy));
+    }
+
     if (count === 0) {
       await User.findByIdAndUpdate(userId, { isOnline: true });
-      socket.broadcast.emit("user:online", { userId });
+
+      /* Broadcast user:online ONLY if this user shows their online state, AND
+         only TO recipients who themselves opted in to seeing online status
+         (the mutual rule). */
+      if (userPrivacy.get(userId)?.showOnline !== false) {
+        forEachOtherSocket(socket.id, (sid, presence) => {
+          if (userPrivacy.get(presence.userId)?.showOnline !== false) {
+            io.to(sid).emit("user:online", { userId });
+          }
+        });
+      }
     }
 
     /* Deliver any messages this user missed while offline */
@@ -105,13 +187,29 @@ export function initSocket(server: http.Server) {
       }
     }
 
-    /* Typing indicators */
+    /* Typing indicators — mutual rule. Don't broadcast if the sender opted
+       out of typing, and don't deliver to recipients who also opted out. */
+    function relayTyping(event: "typing:start" | "typing:stop", chatId: string) {
+      if (userPrivacy.get(userId)?.typingIndicator === false) return;
+
+      const room = io.sockets.adapter.rooms.get(chatId);
+      if (!room) return;
+
+      for (const sid of room) {
+        if (sid === socket.id) continue;
+        const presence = socketPresence.get(sid);
+        if (!presence) continue;
+        if (userPrivacy.get(presence.userId)?.typingIndicator === false) continue;
+        io.to(sid).emit(event, { chatId, userId });
+      }
+    }
+
     socket.on("typing:start", ({ chatId }: { chatId: string }) => {
-      socket.to(chatId).emit("typing:start", { chatId, userId });
+      relayTyping("typing:start", chatId);
     });
 
     socket.on("typing:stop", ({ chatId }: { chatId: string }) => {
-      socket.to(chatId).emit("typing:stop", { chatId, userId });
+      relayTyping("typing:stop", chatId);
     });
 
     /* Presence — client tells us which chat it's focused on and whether the
@@ -129,7 +227,10 @@ export function initSocket(server: http.Server) {
       }
     );
 
-    /* Disconnect */
+    /* Disconnect — mutual rule applies to user:offline too. lastSeen is
+       additionally masked per the SUBJECT's lastSeen setting and per the
+       RECIPIENT's lastSeen setting (the recipient sees no times at all if
+       they opted out). */
     socket.on("disconnect", async () => {
       socketPresence.delete(socket.id);
 
@@ -139,7 +240,29 @@ export function initSocket(server: http.Server) {
         onlineUsers.delete(userId);
         const lastSeen = new Date();
         await User.findByIdAndUpdate(userId, { isOnline: false, lastSeen });
-        socket.broadcast.emit("user:offline", { userId, lastSeen });
+
+        const senderPrivacy = userPrivacy.get(userId) ?? DEFAULT_PRIVACY;
+
+        if (senderPrivacy.showOnline) {
+          const subjectExposesLastSeen = senderPrivacy.lastSeen === "everyone";
+
+          forEachOtherSocket(socket.id, (sid, presence) => {
+            const rp = userPrivacy.get(presence.userId) ?? DEFAULT_PRIVACY;
+            if (!rp.showOnline) return; // mutual: recipient opted out
+            const payload = {
+              userId,
+              lastSeen:
+                subjectExposesLastSeen && rp.lastSeen === "everyone"
+                  ? lastSeen
+                  : null,
+            };
+            io.to(sid).emit("user:offline", payload);
+          });
+        }
+
+        /* Drop the in-memory privacy entry when the user has no more sockets,
+           so reconnects re-read the DB and any out-of-band changes apply. */
+        userPrivacy.delete(userId);
       } else {
         onlineUsers.set(userId, current);
       }

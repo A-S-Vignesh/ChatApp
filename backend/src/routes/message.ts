@@ -8,7 +8,7 @@ import {
   AuthenticatedRequest,
 } from "../middleware/protectRoute.js";
 import { io } from "../server.js";
-import { isUserOnline, isUserFocusedOn } from "../socket.js";
+import { isUserOnline, isUserFocusedOn, getUserPrivacy } from "../socket.js";
 import { sendPushToUser } from "../lib/pushService.js";
 
 const router = Router();
@@ -268,9 +268,45 @@ router.get(
       // reverse for UI (oldest → newest)
       messages.reverse();
 
+      /* Filter readBy per the mutual read-receipts rule:
+         - If the requester (current user) has readReceipts off, they don't get
+           to see anyone else's read state (just their own self-entry).
+         - For readers other than self, drop them from readBy if THEIR
+           readReceipts is off (so senders don't learn they read). */
+      const requesterPrivacy = await getUserPrivacy(userId.toString());
+      const requesterIdStr = userId.toString();
+
+      const readerIdSet = new Set<string>();
+      for (const m of messages) {
+        for (const r of (m.readBy ?? []) as any[]) {
+          readerIdSet.add(r.toString());
+        }
+      }
+      readerIdSet.delete(requesterIdStr);
+
+      const readersPrivacy = new Map<string, boolean>();
+      if (readerIdSet.size > 0) {
+        const others = await User.find({ _id: { $in: Array.from(readerIdSet) } })
+          .select("_id privacy.readReceipts")
+          .lean<Array<{ _id: any; privacy?: { readReceipts?: boolean } }>>();
+        for (const u of others) {
+          readersPrivacy.set(u._id.toString(), u.privacy?.readReceipts !== false);
+        }
+      }
+
+      const filteredMessages = messages.map((m) => ({
+        ...m,
+        readBy: (m.readBy ?? []).filter((r: any) => {
+          const rid = r.toString();
+          if (rid === requesterIdStr) return true; // always show your own
+          if (!requesterPrivacy.readReceipts) return false; // mutual: you opted out
+          return readersPrivacy.get(rid) !== false; // hide opted-out readers
+        }),
+      }));
+
       res.json({
-        messages,
-        nextCursor: messages.length > 0 ? messages[0]._id : null,
+        messages: filteredMessages,
+        nextCursor: filteredMessages.length > 0 ? filteredMessages[0]._id : null,
       });
     } catch (error) {
       console.error("Fetch messages error:", error);
