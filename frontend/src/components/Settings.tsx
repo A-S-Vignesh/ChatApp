@@ -473,8 +473,8 @@ const AppearanceView: React.FC<{
 const AboutView: React.FC = () => (
   <div className="p-6 space-y-1">
     <AboutRow label="App version" value={`v${APP_VERSION}`} />
-    <AboutLink label="Privacy policy" href="/privacy" />
-    <AboutLink label="Terms of service" href="/terms" />
+    <AboutLink label="Privacy policy" href="/privacy.html" />
+    <AboutLink label="Terms of service" href="/terms.html" />
   </div>
 );
 

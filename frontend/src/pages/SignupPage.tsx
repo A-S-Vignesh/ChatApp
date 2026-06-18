@@ -74,13 +74,23 @@ const SignupPage: React.FC<SignupPageProps> = ({ onSwitchToLogin }) => {
 
       <p className="mt-5 text-xs text-center text-slate-400 dark:text-slate-500 leading-relaxed">
         By signing up, you agree to our{" "}
-        <button type="button" className="underline underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+        <a
+          href="/terms.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+        >
           Terms of Service
-        </button>{" "}
+        </a>{" "}
         and{" "}
-        <button type="button" className="underline underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+        <a
+          href="/privacy.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+        >
           Privacy Policy
-        </button>
+        </a>
       </p>
 
       <div className="mt-10 pt-7 border-t border-slate-100 dark:border-slate-800">

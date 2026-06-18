@@ -1,0 +1,98 @@
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --text: #1e293b;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --brand: #2563eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --border: #334155;
+    --brand: #60a5fa;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+
+header.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 24px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--brand);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 20px;
+  flex: none;
+}
+.brand-name { font-size: 20px; font-weight: 700; }
+
+a { color: var(--brand); }
+.back {
+  display: inline-block;
+  margin-bottom: 24px;
+  font-size: 14px;
+  text-decoration: none;
+}
+.back:hover { text-decoration: underline; }
+
+h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.02em; }
+.effective { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+
+h2 {
+  font-size: 19px;
+  margin: 34px 0 10px;
+  letter-spacing: -0.01em;
+}
+p, li { color: var(--text); font-size: 15.5px; }
+.muted, .muted * { color: var(--muted); }
+ul { padding-left: 22px; }
+li { margin: 6px 0; }
+
+.note {
+  margin-top: 40px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 14px;
+  color: var(--muted);
+}
+
+footer {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+}
