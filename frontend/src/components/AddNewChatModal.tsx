@@ -3,6 +3,7 @@ import { X, Mail, UserPlus, Copy, Check, Loader2, Send } from "lucide-react";
 import { useCreateChat } from "../hooks/useCreateChat";
 import { authClient } from "../lib/authClient";
 import InviteFriend from "./InviteFriend";
+import { buildInviteUrl } from "../utils/invite";
 
 interface AddNewChatModalProps {
   isOpen: boolean;
@@ -28,7 +29,9 @@ const AddNewChatModal: React.FC<AddNewChatModalProps> = ({
   if (!isOpen) return null;
 
   const myEmail = session?.user?.email ?? "";
-  const appLink = import.meta.env.VITE_BASE_URL || window.location.origin;
+  /* Personalised invite link — when the recipient opens it and signs in, the
+     app auto-opens a conversation with the inviter. */
+  const appLink = buildInviteUrl(myEmail || undefined);
 
   const isValidEmail = (value: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -39,13 +42,12 @@ const AddNewChatModal: React.FC<AddNewChatModalProps> = ({
     const lines = [
       "Hi,",
       "",
-      "Let's chat on AetherChat — sign in with Google here:",
+      "Let's chat on AetherChat — open this link and sign in with Google, and",
+      "we'll be connected automatically:",
       appLink,
       "",
-      myEmail ? `Then add me (${myEmail}) to start a conversation.` : "",
-      "",
       "See you there!",
-    ].filter((l) => l !== undefined);
+    ];
     return `mailto:${encodeURIComponent(email.trim())}?subject=${subject}&body=${encodeURIComponent(
       lines.join("\n")
     )}`;

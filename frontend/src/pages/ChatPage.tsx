@@ -31,6 +31,8 @@ import { MessagesResponse } from "../types/message";
 import AddNewChatModal from "../components/AddNewChatModal";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { useOutboxFlush } from "../hooks/useOutboxFlush";
+import { useCreateChat } from "../hooks/useCreateChat";
+import { decodeInvite, getInviteFromUrl } from "../utils/invite";
 import * as outbox from "../lib/outbox";
 import { MessageSquare } from "lucide-react";
 import {
@@ -77,6 +79,10 @@ const ChatPage: React.FC = () => {
   /* Per-(chat,user) auto-expiry timers for typing indicators. */
   const typingTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  /* Deep-link invite handling — runs at most once per mount. */
+  const { onCreateChatByEmail } = useCreateChat();
+  const inviteHandledRef = useRef(false);
+
   /* Offline outbox: hydrate pending messages and flush on online/reconnect. */
   useOutboxFlush(session?.user?.id);
 
@@ -87,6 +93,39 @@ const ChatPage: React.FC = () => {
     const t = setTimeout(subscribePush, 3000);
     return () => clearTimeout(t);
   }, [session?.user, subscribePush]);
+
+  /* Deep-link invite: if the user arrived via an invite link, auto-open a
+     conversation with the inviter once they're signed in (WhatsApp-style
+     "click to chat"), then strip the token from the URL. Runs once. */
+  useEffect(() => {
+    if (!session?.user || inviteHandledRef.current) return;
+    const token = getInviteFromUrl();
+    if (!token) return;
+    inviteHandledRef.current = true;
+
+    /* Always clean the token out of the URL, success or not. */
+    const params = new URLSearchParams(window.location.search);
+    params.delete("invite");
+    const qs = params.toString();
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash
+    );
+
+    const inviterEmail = decodeInvite(token);
+    if (!inviterEmail) return;
+    /* Can't start a chat with yourself (e.g. you opened your own link). */
+    if (inviterEmail.toLowerCase() === session.user.email?.toLowerCase()) return;
+
+    onCreateChatByEmail(inviterEmail.toLowerCase())
+      .then((chat) => {
+        if (chat?._id) setActiveChatId(chat._id);
+      })
+      .catch(() => {
+        /* Inviter not found / offline — leave the user on the home screen. */
+      });
+  }, [session?.user, onCreateChatByEmail]);
 
   /* Handle notification clicks from service worker → jump to that chat */
   useEffect(() => {

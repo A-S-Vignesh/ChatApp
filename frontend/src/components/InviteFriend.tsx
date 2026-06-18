@@ -1,19 +1,14 @@
 import React, { useState } from "react";
 import { Share2, Copy, Check } from "lucide-react";
 import { authClient } from "../lib/authClient";
+import { buildInviteUrl } from "../utils/invite";
 
-/* Public URL of this app — what we want friends to open. Falls back to the
-   current origin so it works in any deployment / locally. */
-const APP_LINK = import.meta.env.VITE_BASE_URL || window.location.origin;
-
-function buildInviteText(myEmail?: string): string {
+function buildInviteText(inviteUrl: string): string {
   return [
-    "Let's chat on AetherChat — sign in with Google here:",
-    APP_LINK,
-    myEmail ? `Then add me (${myEmail}) to start a conversation.` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+    "Let's chat on AetherChat — open this link and sign in with Google.",
+    "We'll be connected automatically:",
+    inviteUrl,
+  ].join("\n");
 }
 
 interface InviteFriendProps {
@@ -32,11 +27,11 @@ const InviteFriend: React.FC<InviteFriendProps> = ({ stacked = false, className 
   const { data: session } = authClient.useSession();
   const [copied, setCopied] = useState(false);
 
-  const myEmail = session?.user?.email ?? undefined;
+  const inviteUrl = buildInviteUrl(session?.user?.email ?? undefined);
 
   const copyLink = async (): Promise<boolean> => {
     try {
-      await navigator.clipboard.writeText(APP_LINK);
+      await navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       return true;
@@ -51,8 +46,8 @@ const InviteFriend: React.FC<InviteFriendProps> = ({ stacked = false, className 
       try {
         await navigator.share({
           title: "Join me on AetherChat",
-          text: buildInviteText(myEmail),
-          url: APP_LINK,
+          text: buildInviteText(inviteUrl),
+          url: inviteUrl,
         });
         return;
       } catch {
