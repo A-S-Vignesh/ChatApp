@@ -5,7 +5,7 @@ import Chat from "../models/Chat.js";
 import Message from "../models/Message.js";
 import PushSubscription from "../models/PushSubscription.js";
 import { AuthenticatedRequest } from "../middleware/protectRoute.js";
-import { setUserPrivacyCache, getCachedUserPrivacy } from "../socket.js";
+import { setUserPrivacyCache } from "../socket.js";
 import { auth } from "../lib/auth.js";
 import { fromNodeHeaders } from "better-auth/node";
 
@@ -154,119 +154,6 @@ router.put("/notifications", async (req: AuthenticatedRequest, res) => {
   } catch (err) {
     console.error("Update notification settings error:", err);
     res.status(500).json({ message: "Failed to update settings" });
-  }
-});
-
-/* PUT /api/profile/privacy  body: { readReceipts?, typingIndicator?, lastSeen?, showOnline? } */
-router.put("/privacy", async (req: AuthenticatedRequest, res) => {
-  try {
-    const body = req.body ?? {};
-    const update: Record<string, unknown> = {};
-
-    if (body.readReceipts !== undefined) {
-      if (typeof body.readReceipts !== "boolean") {
-        return res.status(400).json({ message: "readReceipts must be boolean" });
-      }
-      update["privacy.readReceipts"] = body.readReceipts;
-    }
-    if (body.typingIndicator !== undefined) {
-      if (typeof body.typingIndicator !== "boolean") {
-        return res.status(400).json({ message: "typingIndicator must be boolean" });
-      }
-      update["privacy.typingIndicator"] = body.typingIndicator;
-    }
-    if (body.showOnline !== undefined) {
-      if (typeof body.showOnline !== "boolean") {
-        return res.status(400).json({ message: "showOnline must be boolean" });
-      }
-      update["privacy.showOnline"] = body.showOnline;
-    }
-    if (body.lastSeen !== undefined) {
-      if (body.lastSeen !== "everyone" && body.lastSeen !== "nobody") {
-        return res.status(400).json({ message: "lastSeen must be 'everyone' or 'nobody'" });
-      }
-      update["privacy.lastSeen"] = body.lastSeen;
-    }
-
-    if (Object.keys(update).length === 0) {
-      return res.status(400).json({ message: "Nothing to update" });
-    }
-
-    const user = await User.findOneAndUpdate(
-      { email: req.user!.email },
-      { $set: update },
-      { new: true }
-    ).lean();
-
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    res.json({
-      privacy: (user as any).privacy ?? {
-        readReceipts: true,
-        typingIndicator: true,
-        lastSeen: "everyone",
-        showOnline: true,
-      },
-    });
-  } catch (err) {
-    console.error("Update privacy error:", err);
-    res.status(500).json({ message: "Failed to update privacy" });
-  }
-});
-
-/* DELETE /api/profile/me
-   Cascade-delete the account: messages, push subs, chat membership (clean up
-   any chats where this user is the only/last participant). Finally remove the
-   better-auth account so the user can re-sign-up with the same email. */
-router.delete("/me", async (req: AuthenticatedRequest, res) => {
-  try {
-    const userId = req.user!._id as mongoose.Types.ObjectId;
-    const userIdStr = userId.toString();
-
-    /* 1. Remove this user from every chat they participate in. Where they
-          are the last participant, drop the chat + its messages entirely. */
-    const chats = await Chat.find({ participants: userId });
-    for (const chat of chats) {
-      if (chat.participants.length <= 1) {
-        await Message.deleteMany({ chatId: chat._id });
-        await Chat.deleteOne({ _id: chat._id });
-      } else {
-        await Chat.updateOne(
-          { _id: chat._id },
-          {
-            $pull: {
-              participants: userId,
-              deletedFor: userId,
-              mutedBy: userId,
-            },
-          }
-        );
-      }
-    }
-
-    /* 2. Delete messages the user sent (in remaining chats they shared). */
-    await Message.deleteMany({ sender: userId });
-
-    /* 3. Push subscriptions are now orphaned. */
-    await PushSubscription.deleteMany({ userId });
-
-    /* 4. Delete the user record itself. */
-    await User.deleteOne({ _id: userId });
-
-    /* 5. Better Auth account + session cleanup. Try ctx.signOut so the
-          response clears the cookie, then drop the auth-side user record. */
-    try {
-      await auth.api.signOut({
-        headers: fromNodeHeaders(req.headers),
-      });
-    } catch {
-      /* ignore — the auth user is gone after step 4 anyway */
-    }
-
-    res.status(200).json({ deleted: true });
-  } catch (err) {
-    console.error("Delete account error:", err);
-    res.status(500).json({ message: "Failed to delete account" });
   }
 });
 

@@ -162,9 +162,12 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onClose }) => {
         </div>
       </div>
 
-      {/* Footer */}
+      {/* Footer — returns to the open conversation so the user can type. */}
       <footer className="shrink-0 px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-        <button className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-sm shadow-blue-500/30">
+        <button
+          onClick={onClose}
+          className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-sm shadow-blue-500/30"
+        >
           <MessageSquare size={16} />
           Send Message
         </button>

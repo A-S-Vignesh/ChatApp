@@ -30,6 +30,16 @@ const faqs = [
 
 const Help: React.FC<HelpProps> = ({ onClose }) => {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+
+  const q = search.trim().toLowerCase();
+  const filteredFaqs = q
+    ? faqs.filter(
+        (f) =>
+          f.question.toLowerCase().includes(q) ||
+          f.answer.toLowerCase().includes(q)
+      )
+    : faqs;
 
   const toggleFaq = (index: number) => {
     setOpenFaq(openFaq === index ? null : index);
@@ -71,7 +81,13 @@ const Help: React.FC<HelpProps> = ({ onClose }) => {
             />
             <input
               type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setOpenFaq(null);
+              }}
               placeholder="Search help topics..."
+              aria-label="Search help topics"
               className="w-full pl-12 pr-4 py-3 rounded-lg bg-slate-100 dark:bg-slate-700 border border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-800 dark:text-slate-200"
             />
           </div>
@@ -82,8 +98,13 @@ const Help: React.FC<HelpProps> = ({ onClose }) => {
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4">
             Frequently Asked Questions
           </h3>
+          {filteredFaqs.length === 0 ? (
+            <p className="text-sm text-slate-400 dark:text-slate-500">
+              No help topics match &ldquo;{search.trim()}&rdquo;.
+            </p>
+          ) : (
           <div className="space-y-2">
-            {faqs.map((faq, index) => (
+            {filteredFaqs.map((faq, index) => (
               <div
                 key={index}
                 className="border-b border-slate-200 dark:border-slate-700 last:border-b-0"
@@ -115,6 +136,7 @@ const Help: React.FC<HelpProps> = ({ onClose }) => {
               </div>
             ))}
           </div>
+          )}
         </div>
       </div>
     </aside>

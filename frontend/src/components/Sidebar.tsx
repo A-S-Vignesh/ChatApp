@@ -44,7 +44,20 @@ const Sidebar: React.FC<SidebarProps> = ({
   typingByChatId = {},
 }: SidebarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const q = query.trim().toLowerCase();
+  const filteredChats = q
+    ? chats.filter((chat) => {
+        const u = getChatDisplayUser(chat, currentUserId);
+        const last = getLastMessage(chat);
+        return (
+          u.name?.toLowerCase().includes(q) ||
+          last?.text?.toLowerCase().includes(q)
+        );
+      })
+    : chats;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -189,7 +202,10 @@ const Sidebar: React.FC<SidebarProps> = ({
           />
           <input
             type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="Search chats..."
+            aria-label="Search chats"
             className="w-full pl-10 pr-4 py-2 rounded-full bg-slate-100 dark:bg-slate-700 border border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-800 dark:text-slate-200"
           />
         </div>
@@ -209,9 +225,21 @@ const Sidebar: React.FC<SidebarProps> = ({
               Tap the icon above to start a new chat.
             </p>
           </div>
+        ) : filteredChats.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
+            <div className="p-4 bg-slate-100 dark:bg-slate-700/40 rounded-full mb-4">
+              <Search size={28} className="text-slate-400" />
+            </div>
+            <h3 className="text-base font-semibold text-slate-700 dark:text-slate-200">
+              No chats found
+            </h3>
+            <p className="mt-1 text-sm text-slate-400 dark:text-slate-500 leading-relaxed">
+              No conversations match &ldquo;{query.trim()}&rdquo;.
+            </p>
+          </div>
         ) : (
         <ul className="space-y-1 p-2">
-          {chats.map((chat) => {
+          {filteredChats.map((chat) => {
             const displayUser = getChatDisplayUser(chat, currentUserId);
             // console.log("Display user for chat", chat._id, "is", displayUser.image);
             const lastMsg = getLastMessage(chat);

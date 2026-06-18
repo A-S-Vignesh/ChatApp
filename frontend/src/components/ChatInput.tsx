@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Smile, Paperclip, Mic, Send } from "lucide-react";
+import { Smile, Send } from "lucide-react";
 import EmojiPicker, { EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
 import { socket } from "../lib/socket";
 import { useProfile } from "../hooks/useProfile";
@@ -12,6 +12,10 @@ interface ChatInputProps {
 }
 
 const TYPING_STOP_DELAY = 2000;
+/* While the user keeps typing, re-announce "typing" at most this often. The
+   receiver auto-expires the indicator a bit after this, so a sender who
+   disconnects mid-typing can't leave "typing…" stuck on the other screen. */
+const TYPING_HEARTBEAT_MS = 3000;
 
 const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, chatId }) => {
   const [inputText, setInputText] = useState("");
@@ -20,6 +24,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, chatId }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
+  const lastStartRef = useRef(0);
 
   /* Honor the user's typing-indicator privacy: if they've turned it off, we
      never emit typing events. The server enforces this too (defense in depth),
@@ -86,9 +91,15 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, chatId }) => {
 
     if (!typingEnabled) return;
 
-    if (!isTypingRef.current) {
+    /* Heartbeat: emit "typing:start" on the first keystroke and then at most
+       once per TYPING_HEARTBEAT_MS while typing continues, so the receiver's
+       TTL keeps getting refreshed and the indicator doesn't flicker off mid-
+       message. */
+    const now = Date.now();
+    if (!isTypingRef.current || now - lastStartRef.current > TYPING_HEARTBEAT_MS) {
       socket.emit("typing:start", { chatId });
       isTypingRef.current = true;
+      lastStartRef.current = now;
     }
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -164,12 +175,6 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, chatId }) => {
         >
           <Smile size={22} />
         </button>
-        {/* <button
-          type="button"
-          className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 mb-1"
-        >
-          <Paperclip size={22} />
-        </button> */}
         {showEmoji && (
           <div ref={emojiRef} className="absolute bottom-16 left-4 z-50">
             <EmojiPicker
@@ -204,17 +209,14 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, chatId }) => {
           style={{ maxHeight: "120px" }}
         />
 
-        {/* Send/Mic button */}
+        {/* Send button */}
         <button
           type="submit"
           disabled={!inputText.trim()}
-          className="p-3 rounded-full bg-blue-500 text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform duration-150 transform active:scale-95"
-          aria-label={
-            inputText.trim() ? "Send message" : "Record voice message"
-          }
+          className="p-3 rounded-full bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform duration-150 transform active:scale-95"
+          aria-label="Send message"
         >
-          {inputText.trim() ? <Send size={20} /> : <Send size={20} />}
-          {/* <Mic size={20} /> */}
+          <Send size={20} />
         </button>
       </form>
     </div>

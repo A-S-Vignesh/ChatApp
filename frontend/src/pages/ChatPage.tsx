@@ -59,6 +59,9 @@ const ChatPage: React.FC = () => {
   const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
   const [typingByChatId, setTypingByChatId] = useState<Record<string, string[]>>({});
   const [isConnected, setIsConnected] = useState(false);
+  /* After a few seconds of an unresolved session check, reassure the user that
+     a cold backend (free-tier hosting) is just waking up. */
+  const [showSlowHint, setShowSlowHint] = useState(false);
 
   /* Muted chats — derived from server-provided `mutedByMe` on each chat. */
   const mutedChats = React.useMemo(
@@ -70,6 +73,9 @@ const ChatPage: React.FC = () => {
   /* Always-current ref so socket handlers can read activeChatId without stale closures */
   const activeChatIdRef = useRef<string | null>(null);
   activeChatIdRef.current = activeChatId;
+
+  /* Per-(chat,user) auto-expiry timers for typing indicators. */
+  const typingTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   /* Offline outbox: hydrate pending messages and flush on online/reconnect. */
   useOutboxFlush(session?.user?.id);
@@ -200,19 +206,29 @@ const ChatPage: React.FC = () => {
     };
   }, [queryClient]);
 
-  /* Typing indicators */
+  /* Show a "waking up the server" reassurance if the session check is still
+     pending after a few seconds (Render free-tier cold start). */
   useEffect(() => {
-    const startHandler = ({ chatId, userId }: { chatId: string; userId: string }) => {
-      setTypingByChatId((prev) => {
-        const current = prev[chatId] ?? [];
-        if (current.includes(userId)) return prev;
-        return { ...prev, [chatId]: [...current, userId] };
-      });
-    };
+    if (!loading) {
+      setShowSlowHint(false);
+      return;
+    }
+    const t = setTimeout(() => setShowSlowHint(true), 6000);
+    return () => clearTimeout(t);
+  }, [loading]);
 
-    const stopHandler = ({ chatId, userId }: { chatId: string; userId: string }) => {
+  /* Typing indicators — with a receiver-side TTL so a sender who disconnects
+     mid-typing (no typing:stop ever arrives) can't leave the indicator stuck
+     on. The sender re-pings typing:start every few seconds, refreshing the TTL
+     while they keep typing. */
+  useEffect(() => {
+    const TYPING_TTL_MS = 6000;
+    const timers = typingTimeoutsRef.current;
+
+    const removeTyping = (chatId: string, userId: string) => {
       setTypingByChatId((prev) => {
         const current = prev[chatId] ?? [];
+        if (!current.includes(userId)) return prev;
         const updated = current.filter((id) => id !== userId);
         if (updated.length === 0) {
           const { [chatId]: _removed, ...rest } = prev;
@@ -222,12 +238,36 @@ const ChatPage: React.FC = () => {
       });
     };
 
+    const startHandler = ({ chatId, userId }: { chatId: string; userId: string }) => {
+      setTypingByChatId((prev) => {
+        const current = prev[chatId] ?? [];
+        if (current.includes(userId)) return prev;
+        return { ...prev, [chatId]: [...current, userId] };
+      });
+      const key = `${chatId}:${userId}`;
+      if (timers[key]) clearTimeout(timers[key]);
+      timers[key] = setTimeout(() => {
+        removeTyping(chatId, userId);
+        delete timers[key];
+      }, TYPING_TTL_MS);
+    };
+
+    const stopHandler = ({ chatId, userId }: { chatId: string; userId: string }) => {
+      const key = `${chatId}:${userId}`;
+      if (timers[key]) {
+        clearTimeout(timers[key]);
+        delete timers[key];
+      }
+      removeTyping(chatId, userId);
+    };
+
     socket.on("typing:start", startHandler);
     socket.on("typing:stop", stopHandler);
 
     return () => {
       socket.off("typing:start", startHandler);
       socket.off("typing:stop", stopHandler);
+      Object.values(timers).forEach(clearTimeout);
     };
   }, []);
 
@@ -668,10 +708,46 @@ const ChatPage: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-bounce [animation-delay:-0.15s]" />
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" />
           </div>
+
+          {showSlowHint && (
+            <p className="mt-2 max-w-xs text-center text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
+              Waking up the server — this can take a few seconds on the first
+              visit. Hang tight…
+            </p>
+          )}
         </div>
       </div>
     );
   }
+
+  /* The session request itself failed (network / backend unreachable). Don't
+     silently fall through to the login screen — that would log out a user who
+     is actually signed in. Offer an explicit retry. */
+  if (error && !session?.user) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center gap-5 bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 px-6 text-center">
+        <div className="p-4 bg-red-500/10 rounded-2xl">
+          <MessageSquare size={32} className="text-red-500" />
+        </div>
+        <div className="space-y-1.5">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Can't reach the server
+          </h1>
+          <p className="max-w-xs text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            We couldn't load your session. Check your connection and try again —
+            the server may just be waking up.
+          </p>
+        </div>
+        <button
+          onClick={() => refetch()}
+          className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm shadow-blue-500/30"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
   if (!session?.user) {
     return <AuthContainer />;
   }

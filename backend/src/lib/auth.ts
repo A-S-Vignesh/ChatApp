@@ -1,5 +1,5 @@
 import { betterAuth } from "better-auth";
-import { MongoClient } from "mongodb";
+import { MongoClient, Db } from "mongodb";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import dotenv from "dotenv";
 import { sendEmail } from "./sendEmail.js";
@@ -9,8 +9,14 @@ dotenv.config();
 
 /* -------------------- MongoDB -------------------- */
 const client = new MongoClient(process.env.MONGO_URI!);
-await client.connect();
-const db = client.db();
+let db: Db;
+try {
+  await client.connect();
+  db = client.db();
+} catch (err) {
+  console.error("FATAL: Better Auth could not connect to MongoDB at startup:", err);
+  process.exit(1);
+}
 
 /* When the frontend and backend live on different domains (e.g. Vercel +
    Render), cookies must be `SameSite=None; Secure` for the browser to:
