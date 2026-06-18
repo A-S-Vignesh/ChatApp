@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { X, Mail, UserPlus, Copy, Check, Loader2, Send } from "lucide-react";
 import { useCreateChat } from "../hooks/useCreateChat";
 import { authClient } from "../lib/authClient";
+import InviteFriend from "./InviteFriend";
 
 interface AddNewChatModalProps {
   isOpen: boolean;
@@ -207,6 +208,16 @@ const AddNewChatModal: React.FC<AddNewChatModalProps> = ({
           <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
             Enter the email of the person you want to message.
           </p>
+
+          {/* Always-available escape hatch: invite someone who isn't here yet. */}
+          {!notFound && (
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+              <p className="text-xs text-slate-500 dark:text-slate-400 text-center mb-2.5">
+                Not on AetherChat yet? Invite them over.
+              </p>
+              <InviteFriend />
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ import {
   LogOut,
 } from "lucide-react";
 import Avatar from "./Avatar";
+import InviteFriend from "./InviteFriend";
 import { useChats } from "../hooks/useChats";
 import { ChatType } from "../types/chat";
 import { getChatDisplayUser, getLastMessage } from "../utils/chatHelpers";
@@ -224,6 +225,14 @@ const Sidebar: React.FC<SidebarProps> = ({
             <p className="mt-1 text-sm text-slate-400 dark:text-slate-500 leading-relaxed">
               Tap the icon above to start a new chat.
             </p>
+
+            {/* Help a brand-new user get someone to talk to. */}
+            <div className="mt-6 w-full max-w-xs">
+              <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">
+                Nobody here yet? Bring a friend over.
+              </p>
+              <InviteFriend stacked />
+            </div>
           </div>
         ) : filteredChats.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
