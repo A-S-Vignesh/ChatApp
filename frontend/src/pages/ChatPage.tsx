@@ -672,7 +672,6 @@ const ChatPage: React.FC = () => {
       </div>
     );
   }
-  console.log("session:", session);
   if (!session?.user) {
     return <AuthContainer />;
   }
@@ -800,7 +799,6 @@ const ChatPage: React.FC = () => {
           isOpen={showAddNewChatModal}
           onClose={handleCloseAddNewChatModal}
           setShowModel={setShowAddNewChatModal}
-          onCreateChat={handleCreateNewChat}
           setActiveChatId={setActiveChatId}
         />
       </div>

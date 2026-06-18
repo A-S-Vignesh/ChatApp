@@ -15,8 +15,9 @@ const SignupPage: React.FC<SignupPageProps> = ({ onSwitchToLogin }) => {
     setLoading(true);
     setError(null);
     try {
+      const callbackURL = import.meta.env.VITE_BASE_URL || window.location.origin;
       await authClient.signIn.social(
-        { provider: "google", callbackURL: import.meta.env.VITE_BASE_URL },
+        { provider: "google", callbackURL },
         {
           onError: (ctx) => {
             setError(ctx.error.message || "Google signup failed");
@@ -45,7 +46,7 @@ const SignupPage: React.FC<SignupPageProps> = ({ onSwitchToLogin }) => {
           Create your account
         </h2>
         <p className="mt-2.5 text-slate-500 dark:text-slate-400">
-          Join thousands of teams already on AetherChat
+          Sign up with Google and start chatting in seconds
         </p>
       </div>
 

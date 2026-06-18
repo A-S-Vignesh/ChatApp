@@ -15,8 +15,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ onSwitchToSignup }) => {
     setLoading(true);
     setError(null);
     try {
+      /* After Google completes, Better Auth redirects the browser to this URL.
+         Fall back to the current origin so the user always returns to the
+         frontend they came from — even if VITE_BASE_URL isn't set on the
+         deployment. Without this fallback, Better Auth uses its own baseURL
+         (the backend) and the user ends up stranded there. */
+      const callbackURL = import.meta.env.VITE_BASE_URL || window.location.origin;
       await authClient.signIn.social(
-        { provider: "google", callbackURL: import.meta.env.VITE_BASE_URL },
+        { provider: "google", callbackURL },
         { onError: (ctx) => { setError(ctx.error.message || "Google login failed"); setLoading(false); } }
       );
     } catch (err: any) {

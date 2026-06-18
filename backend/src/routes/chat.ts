@@ -16,12 +16,11 @@ const router = Router();
 router.post("/direct", async (req: AuthenticatedRequest, res: Response) => {
   try {
     const currentUserId = req.user!._id;
-    console.log("currentUserId", currentUserId);
     const { email } = req.body;
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ message: "No AetherChat user found with that email" });
     }
 
     const userId = user._id;

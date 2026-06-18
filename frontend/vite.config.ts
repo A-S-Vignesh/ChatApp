@@ -3,7 +3,13 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  /* Strip all console.* and debugger statements from production bundles so no
+     session/user data can leak through the browser console in prod. Left intact
+     in dev so local debugging still works. */
+  esbuild: {
+    drop: mode === "production" ? ["console", "debugger"] : [],
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -51,4 +57,4 @@ export default defineConfig({
       },
     }),
   ],
-});
+}));

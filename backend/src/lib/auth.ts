@@ -12,6 +12,14 @@ const client = new MongoClient(process.env.MONGO_URI!);
 await client.connect();
 const db = client.db();
 
+/* When the frontend and backend live on different domains (e.g. Vercel +
+   Render), cookies must be `SameSite=None; Secure` for the browser to:
+     a) store cookies set in cross-origin responses (the OAuth `state` cookie)
+     b) send those cookies back on the callback redirect from Google.
+   In local dev (same-host http) we want plain `Lax` so the browser keeps
+   accepting cookies without https. We toggle on whether baseURL is https. */
+const isProduction = (process.env.BETTER_AUTH_URL ?? "").startsWith("https://");
+
 /* -------------------- Auth -------------------- */
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET!,
@@ -23,6 +31,18 @@ export const auth = betterAuth({
     process.env.FRONTEND_URL,
     "http://localhost:5173",
   ].filter(Boolean) as string[],
+
+  advanced: {
+    /* Cross-site cookies are required when frontend (Vercel) and backend
+       (Render) are on different registrable domains. Without these flags
+       the OAuth state cookie is dropped, surfacing as `state_mismatch`
+       after the Google redirect. */
+    defaultCookieAttributes: {
+      sameSite: isProduction ? "none" : "lax",
+      secure: isProduction,
+      httpOnly: true,
+    },
+  },
 
   plugins: [passkey()],
 

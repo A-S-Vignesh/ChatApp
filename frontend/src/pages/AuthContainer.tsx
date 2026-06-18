@@ -1,8 +1,22 @@
-import { useState } from "react";
-import { MessageSquare, Shield, Zap, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { MessageSquare, Shield, Zap, Send, AlertCircle, X } from "lucide-react";
 import LoginPage from "./LoginPage";
 import SignupPage from "./SignupPage";
 import { motion, AnimatePresence } from "framer-motion";
+
+/* Map the raw OAuth/Better-Auth error codes that come back on the redirect URL
+   (?error=…) to a friendly, actionable message. Without this, a failed Google
+   sign-in silently dumps the user back on the login screen with no explanation. */
+function friendlyAuthError(code: string): string {
+  const c = code.toLowerCase();
+  if (c.includes("access_denied") || c.includes("cancel"))
+    return "Sign-in was cancelled. Please try again.";
+  if (c.includes("state") || c.includes("expired") || c.includes("restart"))
+    return "Your sign-in session expired. Please try signing in again.";
+  if (c.includes("account") && c.includes("exist"))
+    return "An account with this email already exists. Try signing in instead.";
+  return "Google sign-in didn't complete. Please try again.";
+}
 
 const FEATURES = [
   {
@@ -16,22 +30,16 @@ const FEATURES = [
     icon: Shield,
     color: "text-green-400",
     bg: "bg-green-400/10",
-    title: "Secure by default",
-    desc: "Your messages are protected with enterprise-grade security",
+    title: "Private by default",
+    desc: "You control your online status, last seen, and read receipts",
   },
   {
-    icon: Users,
+    icon: Send,
     color: "text-blue-300",
     bg: "bg-blue-300/10",
-    title: "Team collaboration",
-    desc: "Connect and coordinate across your entire organization",
+    title: "Works offline",
+    desc: "Messages you write offline are queued and sent when you reconnect",
   },
-];
-
-const STATS = [
-  { value: "10K+", label: "Active users" },
-  { value: "99.9%", label: "Uptime" },
-  { value: "< 50ms", label: "Avg. latency" },
 ];
 
 const slideVariants = {
@@ -49,6 +57,24 @@ const panelVariants = {
 const AuthContainer = () => {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [direction, setDirection] = useState(1);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  /* If Google/Better Auth redirected back with an error, surface it and then
+     strip the param so a refresh doesn't keep showing the banner. */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("error") || params.get("error_description");
+    if (!code) return;
+    setAuthError(friendlyAuthError(code));
+    params.delete("error");
+    params.delete("error_description");
+    const qs = params.toString();
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash
+    );
+  }, []);
 
   const handleSwitchMode = (newMode: "login" | "signup") => {
     if (mode === newMode) return;
@@ -108,8 +134,8 @@ const AuthContainer = () => {
                 </h2>
                 <p className="text-blue-100/80 text-base leading-relaxed">
                   {mode === "login"
-                    ? "Continue where you left off. Your team is waiting."
-                    : "Create your free account and connect with your team instantly."}
+                    ? "Continue where you left off. Pick up your conversations."
+                    : "Create your free account and start chatting in seconds."}
                 </p>
               </div>
 
@@ -127,18 +153,6 @@ const AuthContainer = () => {
                   </div>
                 ))}
               </div>
-
-              {/* Stats */}
-              <div className="pt-8 border-t border-white/10">
-                <div className="grid grid-cols-3 gap-4">
-                  {STATS.map(({ value, label }) => (
-                    <div key={label} className="text-center">
-                      <p className="text-xl font-bold text-white">{value}</p>
-                      <p className="text-blue-100/60 text-xs mt-0.5">{label}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </motion.div>
           </AnimatePresence>
         </div>
@@ -151,6 +165,20 @@ const AuthContainer = () => {
         }`}
       >
         <div className="w-full max-w-sm">
+          {authError && (
+            <div className="mb-6 flex items-start gap-3 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+              <AlertCircle size={18} className="text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
+              <p className="text-sm text-red-600 dark:text-red-400 grow">{authError}</p>
+              <button
+                type="button"
+                onClick={() => setAuthError(null)}
+                aria-label="Dismiss error"
+                className="text-red-400 hover:text-red-600 dark:hover:text-red-300 shrink-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
           <AnimatePresence mode="wait" custom={direction}>
             {mode === "login" ? (
               <motion.div
