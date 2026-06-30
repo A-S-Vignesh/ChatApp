@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { MongoClient, Db } from "mongodb";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
+import { bearer, oneTimeToken } from "better-auth/plugins";
 import dotenv from "dotenv";
 import { sendEmail } from "./sendEmail.js";
 import { passkey } from "@better-auth/passkey";
@@ -35,7 +36,9 @@ export const auth = betterAuth({
      listed comes back as INVALID_CALLBACKURL. */
   trustedOrigins: [
     process.env.FRONTEND_URL,
+    process.env.BETTER_AUTH_URL, // backend's own origin — the social callback redirects here first
     "http://localhost:5173",
+    "http://localhost:5000",
   ].filter(Boolean) as string[],
 
   advanced: {
@@ -50,7 +53,25 @@ export const auth = betterAuth({
     },
   },
 
-  plugins: [passkey()],
+  /* bearer() lets the session token travel as an `Authorization: Bearer …`
+     header instead of a cookie — the only way to authenticate cross-site to
+     a different registrable domain (Vercel ↔ Render) once browsers partition
+     third-party cookies. oneTimeToken() issues a short-lived, single-use token
+     used purely to hand the freshly-minted session from the backend (where the
+     OAuth callback lands) over to the frontend, which then stores the bearer
+     token. See `/api/social-complete` in server.ts. */
+  plugins: [
+    passkey(),
+    bearer(),
+    /* Hardening for the URL-borne handoff token:
+       - expiresIn: 1 (minute) — the token only has to survive one
+         Render→browser→Vercel redirect hop (sub-second); a 1-min ceiling keeps
+         the replay window tiny even though it briefly lives in a URL.
+       - storeToken: "hashed" — only a hash is persisted, so a leaked DB dump
+         can't be replayed. It's already single-use: verifyOneTimeToken deletes
+         the record before it even checks expiry. */
+    oneTimeToken({ expiresIn: 1, storeToken: "hashed" }),
+  ],
 
   /* 🔐 Mongo Adapter */
   database: mongodbAdapter(db),
@@ -64,6 +85,21 @@ export const auth = betterAuth({
     accountLinking: {
       enabled: true,
     },
+    /* Store the OAuth `state` (CSRF/PKCE handshake) in MongoDB instead of a
+       cookie. With the frontend (Vercel) and backend (Render) on different
+       registrable domains, the browser partitions the state cookie set during
+       sign-in away from the first-party jar used at Google's callback — so the
+       cookie is gone on return and Better Auth aborts with `state_mismatch`.
+       Keying the state by the value Google echoes back in the URL removes the
+       cookie from the loop entirely.
+       `skipStateCookieCheck` is required alongside it: even under the database
+       strategy Better Auth still cross-checks a signed `state` cookie (which is
+       equally lost cross-site) unless we opt out. The CSRF protection then
+       rests on the state being server-issued, unguessable (32 random chars) and
+       single-use (deleted on first callback) — the same trade-off Better Auth's
+       own oauth-proxy plugin makes for multi-domain deployments. */
+    storeStateStrategy: "database",
+    skipStateCookieCheck: true,
   },
   session: {
     modelName: "sessions",

@@ -91,12 +91,19 @@ export function initSocket(server: http.Server) {
     pingInterval: 25000,
   });
 
-  /* AUTH MIDDLEWARE */
+  /* AUTH MIDDLEWARE
+     Browsers can't attach an `Authorization` header to a WebSocket handshake,
+     so the client passes the bearer token via `socket.handshake.auth.token`
+     (see frontend lib/socket.ts). We fold it into the headers as a Bearer token
+     so the bearer plugin resolves the session. The cookie header is still
+     forwarded as a fallback for same-site/local-dev sessions. */
   io.use(async (socket, next) => {
     try {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(socket.request.headers),
-      });
+      const headers = fromNodeHeaders(socket.request.headers);
+      const token = socket.handshake.auth?.token;
+      if (token) headers.set("authorization", `Bearer ${token}`);
+
+      const session = await auth.api.getSession({ headers });
       if (!session) return next(new Error("Unauthorized"));
       socket.data.userId = session.user.id;
       next();

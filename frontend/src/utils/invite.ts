@@ -40,3 +40,19 @@ export function inviteAwareCallbackURL(): string {
   const invite = getInviteFromUrl();
   return invite ? `${APP_LINK}/?invite=${encodeURIComponent(invite)}` : APP_LINK;
 }
+
+const AUTH_BASE = (
+  import.meta.env.VITE_AUTH_BASE_URL || "http://localhost:5000"
+).replace(/\/$/, "");
+
+/** Where Google sign-in should send the browser when it's done.
+
+    Because the session cookie can't cross from the backend's domain to the
+    frontend's, we don't return straight to the app. Instead we route through the
+    backend's `/api/social-complete`, which (where the session IS readable) mints
+    a one-time token and bounces back to the real frontend destination — invite
+    token and all — with `?ott=` appended for the bearer-token handoff. */
+export function socialLoginCallbackURL(): string {
+  const dest = inviteAwareCallbackURL();
+  return `${AUTH_BASE}/api/social-complete?to=${encodeURIComponent(dest)}`;
+}

@@ -23,7 +23,7 @@ import {
 } from "../../constants";
 
 import AuthContainer from "./AuthContainer";
-import { authClient } from "../lib/authClient";
+import { authClient, BEARER_TOKEN_KEY } from "../lib/authClient";
 import { socket } from "../lib/socket";
 import { api } from "../lib/api";
 import { useQueryClient } from "@tanstack/react-query";
@@ -690,6 +690,9 @@ const ChatPage: React.FC = () => {
     /* Outbox is per-account; wipe it so the next user doesn't inherit unsent messages. */
     await outbox.clearAll();
     await authClient.signOut();
+    /* Drop the bearer token so the reloaded app starts signed-out. signOut
+       revokes it server-side; this clears the client copy. */
+    localStorage.removeItem(BEARER_TOKEN_KEY);
     window.location.reload();
   };
 

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Loader2, MessageSquare } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import { authClient } from "../lib/authClient";
-import { inviteAwareCallbackURL } from "../utils/invite";
+import { socialLoginCallbackURL } from "../utils/invite";
 
 interface LoginPageProps {
   onSwitchToSignup: () => void;
@@ -16,12 +16,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onSwitchToSignup }) => {
     setLoading(true);
     setError(null);
     try {
-      /* After Google completes, Better Auth redirects the browser to this URL.
-         Fall back to the current origin so the user always returns to the
-         frontend they came from — even if VITE_BASE_URL isn't set on the
-         deployment. If they arrived via an invite link, preserve the `invite`
-         token so the conversation auto-opens once they're signed in. */
-      const callbackURL = inviteAwareCallbackURL();
+      /* After Google completes, Better Auth redirects to the backend's
+         /api/social-complete, which hands the session to the frontend as a
+         bearer token (cross-domain cookies don't work). Any pending invite
+         token is preserved through the round-trip so the conversation still
+         auto-opens once they're signed in. */
+      const callbackURL = socialLoginCallbackURL();
       await authClient.signIn.social(
         { provider: "google", callbackURL },
         { onError: (ctx) => { setError(ctx.error.message || "Google login failed"); setLoading(false); } }

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Loader2, MessageSquare } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import { authClient } from "../lib/authClient";
-import { inviteAwareCallbackURL } from "../utils/invite";
+import { socialLoginCallbackURL } from "../utils/invite";
 
 interface SignupPageProps {
   onSwitchToLogin: () => void;
@@ -16,7 +16,7 @@ const SignupPage: React.FC<SignupPageProps> = ({ onSwitchToLogin }) => {
     setLoading(true);
     setError(null);
     try {
-      const callbackURL = inviteAwareCallbackURL();
+      const callbackURL = socialLoginCallbackURL();
       await authClient.signIn.social(
         { provider: "google", callbackURL },
         {
