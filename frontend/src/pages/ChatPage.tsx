@@ -23,6 +23,7 @@ import {
 } from "../../constants";
 
 import AuthContainer from "./AuthContainer";
+import BootScreen from "../components/BootScreen";
 import { authClient, BEARER_TOKEN_KEY } from "../lib/authClient";
 import { socket } from "../lib/socket";
 import { api } from "../lib/api";
@@ -61,9 +62,6 @@ const ChatPage: React.FC = () => {
   const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
   const [typingByChatId, setTypingByChatId] = useState<Record<string, string[]>>({});
   const [isConnected, setIsConnected] = useState(false);
-  /* After a few seconds of an unresolved session check, reassure the user that
-     a cold backend (free-tier hosting) is just waking up. */
-  const [showSlowHint, setShowSlowHint] = useState(false);
 
   /* Muted chats — derived from server-provided `mutedByMe` on each chat. */
   const mutedChats = React.useMemo(
@@ -245,16 +243,6 @@ const ChatPage: React.FC = () => {
     };
   }, [queryClient]);
 
-  /* Show a "waking up the server" reassurance if the session check is still
-     pending after a few seconds (Render free-tier cold start). */
-  useEffect(() => {
-    if (!loading) {
-      setShowSlowHint(false);
-      return;
-    }
-    const t = setTimeout(() => setShowSlowHint(true), 6000);
-    return () => clearTimeout(t);
-  }, [loading]);
 
   /* Typing indicators — with a receiver-side TTL so a sender who disconnects
      mid-typing (no typing:stop ever arrives) can't leave the indicator stuck
@@ -724,42 +712,7 @@ const ChatPage: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
-        <div className="flex flex-col items-center gap-6">
-          <div className="relative">
-            {/* Soft pulsing halo behind the logo */}
-            <div className="absolute inset-0 rounded-2xl bg-blue-500/30 blur-xl animate-pulse" />
-            <div className="relative p-4 bg-blue-600 rounded-2xl text-white shadow-lg shadow-blue-500/30">
-              <MessageSquare size={36} strokeWidth={2.25} />
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center gap-1.5">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-              AetherChat
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Real-time messaging
-            </p>
-          </div>
-
-          {/* Three-dot bouncing loader */}
-          <div className="flex items-center gap-1.5 mt-2" aria-label="Loading">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-bounce [animation-delay:-0.3s]" />
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-bounce [animation-delay:-0.15s]" />
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" />
-          </div>
-
-          {showSlowHint && (
-            <p className="mt-2 max-w-xs text-center text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
-              Waking up the server — this can take a few seconds on the first
-              visit. Hang tight…
-            </p>
-          )}
-        </div>
-      </div>
-    );
+    return <BootScreen />;
   }
 
   /* The session request itself failed (network / backend unreachable). Don't
